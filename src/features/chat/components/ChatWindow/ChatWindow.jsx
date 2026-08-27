@@ -39,7 +39,7 @@ export const ChatWindow = ({ conversationId, currentUserId, activeContactName })
             <div className="chat-header" style={{ padding: '12px 16px', borderBottom: '1px solid #eee' }}>
                 <h3 style={{ margin: 0 }}>{activeContactName || `Chat #${conversationId}`}</h3>
                 {otherUsersTyping.length > 0 && (
-                    <span className="typing-status-header" style={{ fontSize: '12px', color: '#1677ff', fontStyle: 'italic' }}>
+                    <span className="typing-status-header" style={{ fontSize: '12px', color: '#00a884', fontStyle: 'italic' }}>
                         {otherUsersTyping.length === 1
                             ? `${activeContactName || 'Someone'} is typing...`
                             : `${otherUsersTyping.length} people are typing...`}

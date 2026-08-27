@@ -69,8 +69,8 @@ export const getChatHistory = async (roomId, page = 1) => {
  * Clear or reset specific chat session
  * @param {string} roomId
  */
-export const clearChatSession = async (roomId) => {
-    const response = await axiosPrivate.delete(`/chat/session/${roomId}`);
+export const clearChatSession = async (conversationId) => {
+    const response = await axiosPrivate.delete(`/chat/session/${conversationId}`);
     return response.data;
 };
 

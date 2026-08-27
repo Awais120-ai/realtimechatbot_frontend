@@ -23,7 +23,7 @@ export const TypingIndicator = ({ conversationId, currentUserId }) => {
         : `${activeTypingUsers.length} people are typing...`;
 
     return (
-        <div className="typing-indicator" style={{ padding: '8px 12px', color: '#1677ff', fontSize: '13px', fontStyle: 'italic' }}>
+        <div className="typing-indicator" style={{ padding: '8px 12px', color: '#00a884', fontSize: '13px', fontStyle: 'italic' }}>
             <span>{text}</span>
         </div>
     );

@@ -7,6 +7,7 @@ import {
     Typography,
     Spin,
     Modal,
+    Dropdown,
     message as antMessage,
 } from "antd";
 
@@ -24,6 +25,7 @@ import {
     SunOutlined,
     MoonOutlined,
     ArrowLeftOutlined,
+    MoreOutlined,
 } from "@ant-design/icons";
 
 import { useNavigate } from "react-router-dom";
@@ -50,6 +52,7 @@ import {
     getUnreadCount,
     getUsers,
     uploadChatFile,
+    clearChatSession,
 } from "../../../api/chat.api";
 
 import styles from "./ChatPage.module.css";
@@ -1952,6 +1955,59 @@ const ChatPage = () => {
 
 
     /* ========================================================
+       clear chat
+    ======================================================== */
+
+    const handleClearChat = async () => {
+        if (!selectedContact?.id) {
+            return;
+        }
+
+        Modal.confirm({
+            title: "Clear chat?",
+            content:
+                "Are you sure you want to clear all messages from this conversation?",
+            okText: "Clear",
+            cancelText: "Cancel",
+            okButtonProps: {
+                danger: true,
+            },
+
+            onOk: async () => {
+                try {
+                    await clearChatSession(
+                        selectedContact.id
+                    );
+
+                    // Immediately clear UI
+                    setMessages([]);
+
+                    // Exit edit mode if active
+                    setEditingMessageId(null);
+                    setMessageText("");
+
+                    // Close notification popup if open
+                    setNotificationOpen(false);
+
+                    antMessage.success(
+                        "Chat cleared successfully."
+                    );
+                } catch (error) {
+                    console.error(
+                        "Failed to clear chat:",
+                        error
+                    );
+
+                    antMessage.error(
+                        error?.response?.data?.detail ||
+                        "Failed to clear chat."
+                    );
+                }
+            },
+        });
+    };
+
+    /* ========================================================
        LOGOUT
     ======================================================== */
 
@@ -2698,7 +2754,7 @@ const ChatPage = () => {
                                                             borderRadius:
                                                                 "11px",
                                                             background:
-                                                                "#1677ff",
+                                                                "#25d366",
                                                             color:
                                                                 "#fff",
                                                             fontSize:
@@ -2856,7 +2912,7 @@ const ChatPage = () => {
                                             <span
                                                 style={{
                                                     color:
-                                                        "#1677ff",
+                                                        "#00a884",
                                                     fontWeight:
                                                         "bold",
                                                 }}
@@ -2884,70 +2940,89 @@ const ChatPage = () => {
 
                             <div
                                 style={{
-                                    marginLeft:
-                                        "auto",
-                                    position:
-                                        "relative",
+                                    marginLeft: "auto",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "4px",
                                 }}
                             >
+                                {/* NOTIFICATION */}
 
-                                <Button
-                                    type="text"
-                                    icon={
-                                        <BellOutlined />
-                                    }
-                                    onClick={() =>
-                                        setNotificationOpen(
-                                            (prev) =>
-                                                !prev
-                                        )
-                                    }
-                                />
+                                <div
+                                    style={{
+                                        position: "relative",
+                                    }}
+                                >
+                                    <Button
+                                        type="text"
+                                        icon={<BellOutlined />}
+                                        onClick={() =>
+                                            setNotificationOpen(
+                                                (prev) => !prev
+                                            )
+                                        }
+                                    />
 
-
-                                {notificationCount >
-                                    0 && (
-
+                                    {notificationCount > 0 && (
                                         <span
                                             style={{
-                                                position:
-                                                    "absolute",
-                                                top:
-                                                    "0",
-                                                right:
-                                                    "0",
-                                                minWidth:
-                                                    "18px",
-                                                height:
-                                                    "18px",
-                                                borderRadius:
-                                                    "9px",
-                                                background:
-                                                    "#ff4d4f",
-                                                color:
-                                                    "#fff",
-                                                fontSize:
-                                                    "10px",
-                                                fontWeight:
-                                                    700,
-                                                display:
-                                                    "flex",
-                                                alignItems:
-                                                    "center",
-                                                justifyContent:
-                                                    "center",
-                                                padding:
-                                                    "0 4px",
+                                                position: "absolute",
+                                                top: "0",
+                                                right: "0",
+                                                minWidth: "18px",
+                                                height: "18px",
+                                                borderRadius: "9px",
+                                                background: "#ff4d4f",
+                                                color: "#fff",
+                                                fontSize: "10px",
+                                                fontWeight: 700,
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                padding: "0 4px",
                                             }}
                                         >
-                                            {notificationCount >
-                                                99
+                                            {notificationCount > 99
                                                 ? "99+"
                                                 : notificationCount}
                                         </span>
-
                                     )}
+                                </div>
 
+                                {/* THREE DOTS MENU */}
+
+                                <Dropdown
+                                    trigger={["click"]}
+                                    placement="bottomRight"
+                                    menu={{
+                                        items: [
+                                            {
+                                                key: "clear-chat",
+                                                label: (
+                                                    <span
+                                                        style={{
+                                                            color: "#ff4d4f",
+                                                        }}
+                                                    >
+                                                        Clear chat
+                                                    </span>
+                                                ),
+                                            },
+                                        ],
+
+                                        onClick: ({ key }) => {
+                                            if (key === "clear-chat") {
+                                                handleClearChat();
+                                            }
+                                        },
+                                    }}
+                                >
+                                    <Button
+                                        type="text"
+                                        icon={<MoreOutlined />}
+                                        aria-label="Chat options"
+                                    />
+                                </Dropdown>
                             </div>
 
 
@@ -3262,7 +3337,9 @@ const ChatPage = () => {
                                                         background:
                                                             notification.is_read
                                                                 ? "transparent"
-                                                                : "#f0f7ff",
+                                                                : darkMode
+                                                                    ? "#202c33"
+                                                                    : "#e7fce3",
                                                         marginBottom:
                                                             "4px",
                                                     }}
@@ -3473,10 +3550,6 @@ const ChatPage = () => {
                                                                         }
                                                                         target="_blank"
                                                                         rel="noopener noreferrer"
-                                                                        style={{
-                                                                            display:
-                                                                                "block",
-                                                                        }}
                                                                     >
 
                                                                         <img
@@ -3785,443 +3858,443 @@ const ChatPage = () => {
 
                                         );
                                     }
-                                                )
+                                )
 
                             )}
 
 
-                                                {/* TYPING */}
+                            {/* TYPING */}
 
-                                                {isPartnerTyping && (
+                            {isPartnerTyping && (
 
-                                                    <div
-                                                        className={
-                                                            styles.messageRow
-                                                        }
-                                                    >
+                                <div
+                                    className={
+                                        styles.messageRow
+                                    }
+                                >
 
-                                                        <div
-                                                            className={`${styles.messageBubble} ${styles.otherMessage}`}
-                                                            style={{
-                                                                fontStyle:
-                                                                    "italic",
-                                                                color:
-                                                                    "#666",
-                                                            }}
-                                                        >
-                                                            typing...
-                                                        </div>
+                                    <div
+                                        className={`${styles.messageBubble} ${styles.otherMessage}`}
+                                        style={{
+                                            fontStyle:
+                                                "italic",
+                                            color:
+                                                "#666",
+                                        }}
+                                    >
+                                        typing...
+                                    </div>
 
-                                                    </div>
+                                </div>
 
-                                                )}
+                            )}
 
 
-                                                <div
-                                                    ref={
-                                                        messagesEndRef
-                                                    }
-                                                />
+                            <div
+                                ref={
+                                    messagesEndRef
+                                }
+                            />
 
-                                            </section>
+                        </section>
 
 
                         {/* =================================================
                             INPUT
                         ================================================= */}
 
-                                        <footer
-                                            className={
-                                                styles.messageInputArea
-                                            }
-                                        >
-
-                                            <input
-                                                id="chat-file-input"
-                                                type="file"
-                                                accept="image/*,.pdf,.txt,.doc,.docx,.xls,.xlsx,.zip"
-                                                style={{
-                                                    display:
-                                                        "none",
-                                                }}
-                                                onChange={
-                                                    handleFileSelect
-                                                }
-                                            />
-
-
-                                            <Button
-                                                size="large"
-                                                icon={
-                                                    <PaperClipOutlined />
-                                                }
-                                                onClick={() =>
-                                                    document
-                                                        .getElementById(
-                                                            "chat-file-input"
-                                                        )
-                                                        ?.click()
-                                                }
-                                                disabled={
-                                                    uploadingFile
-                                                }
-                                            />
-
-
-                                            <Input
-                                                size="large"
-                                                placeholder={
-                                                    selectedFile
-                                                        ? selectedFile.name
-                                                        : editingMessageId
-                                                            ? "Edit message..."
-                                                            : "Type a message..."
-                                                }
-                                                value={
-                                                    messageText
-                                                }
-                                                onChange={
-                                                    handleInputChange
-                                                }
-                                                onKeyDown={
-                                                    handleKeyDown
-                                                }
-                                                disabled={
-                                                    uploadingFile
-                                                }
-                                            />
-
-
-                                            {editingMessageId && (
-
-                                                <Button
-                                                    htmlType="button"
-                                                    size="large"
-                                                    onClick={(event) => {
-                                                        event.preventDefault();
-                                                        event.stopPropagation();
-
-                                                        handleCancelEdit();
-                                                    }}
-                                                >
-                                                    Cancel
-                                                </Button>
-
-                                            )}
-
-
-                                            <Button
-                                                htmlType="button"
-                                                type="primary"
-                                                size="large"
-                                                icon={
-                                                    <SendOutlined />
-                                                }
-                                                onClick={(event) => {
-                                                    event.preventDefault();
-                                                    event.stopPropagation();
-
-                                                    handleSendMessage();
-                                                }}
-                                                loading={
-                                                    uploadingFile
-                                                }
-                                            >
-                                                {editingMessageId
-                                                    ? "Update"
-                                                    : "Send"}
-                                            </Button>
-
-                                        </footer>
-
-                    </>
-
-                        ) : (
-
-                        <div
-                            style={{
-                                display:
-                                    "flex",
-                                justifyContent:
-                                    "center",
-                                alignItems:
-                                    "center",
-                                height:
-                                    "100%",
-                                color:
-                                    "#888",
-                            }}
-                        >
-                            Select a conversation or
-                            click "+ New" to start a chat
-                        </div>
-
-                )}
-
-                    </main>
-
-
-                {/* =================================================
-                START NEW CHAT MODAL
-            ================================================= */}
-
-                <Modal
-                    title="Start New Chat"
-                    open={isModalOpen}
-                    onOk={
-                        handleCreateChat
-                    }
-                    confirmLoading={
-                        creatingChat
-                    }
-                    okText="Start Chat"
-                    cancelText="Cancel"
-                    onCancel={() => {
-                        setIsModalOpen(false);
-                        setUserSearch("");
-                        setSelectedUser(null);
-                    }}
-                >
-
-                    {/* USER SEARCH */}
-
-                    <Input
-                        prefix={
-                            <SearchOutlined />
-                        }
-                        placeholder="Search registered users..."
-                        value={
-                            userSearch
-                        }
-                        onChange={(e) =>
-                            setUserSearch(
-                                e.target.value
-                            )
-                        }
-                        allowClear
-                        style={{
-                            marginBottom:
-                                "12px",
-                        }}
-                    />
-
-
-                    {/* USERS */}
-
-                    {loadingUsers ? (
-
-                        <div
-                            style={{
-                                textAlign:
-                                    "center",
-                                padding:
-                                    "30px",
-                            }}
-                        >
-                            <Spin />
-                        </div>
-
-                    ) : (
-
-                        <div
-                            style={{
-                                maxHeight:
-                                    "350px",
-                                overflowY:
-                                    "auto",
-                                border:
-                                    "1px solid #f0f0f0",
-                                borderRadius:
-                                    "8px",
-                            }}
+                        <footer
+                            className={
+                                styles.messageInputArea
+                            }
                         >
 
-                            {filteredUsers.map(
-                                (user) => {
-
-                                    const isSelected =
-                                        String(
-                                            selectedUser?.id
-                                        ) ===
-                                        String(
-                                            user.id
-                                        );
-
-
-                                    return (
-
-                                        <button
-                                            key={
-                                                user.id
-                                            }
-                                            type="button"
-                                            onClick={() =>
-                                                setSelectedUser(
-                                                    user
-                                                )
-                                            }
-                                            style={{
-                                                width:
-                                                    "100%",
-                                                border:
-                                                    "none",
-                                                background:
-                                                    isSelected
-                                                        ? "#e6f4ff"
-                                                        : "#fff",
-                                                padding:
-                                                    "12px",
-                                                display:
-                                                    "flex",
-                                                alignItems:
-                                                    "center",
-                                                gap:
-                                                    "12px",
-                                                cursor:
-                                                    "pointer",
-                                                textAlign:
-                                                    "left",
-                                                borderBottom:
-                                                    "1px solid #f5f5f5",
-                                            }}
-                                        >
-
-                                            <Avatar
-                                                size={42}
-                                                icon={
-                                                    <UserOutlined />
-                                                }
-                                            />
-
-
-                                            <div
-                                                style={{
-                                                    flex:
-                                                        1,
-                                                    minWidth:
-                                                        0,
-                                                }}
-                                            >
-
-                                                <div
-                                                    style={{
-                                                        fontWeight:
-                                                            600,
-                                                        color:
-                                                            "#222",
-                                                    }}
-                                                >
-                                                    {user.username ||
-                                                        user.name ||
-                                                        user.full_name ||
-                                                        `User #${user.id}`}
-                                                </div>
-
-
-                                                {user.email && (
-
-                                                    <div
-                                                        style={{
-                                                            fontSize:
-                                                                "12px",
-                                                            color:
-                                                                "#888",
-                                                            marginTop:
-                                                                "2px",
-                                                        }}
-                                                    >
-                                                        {
-                                                            user.email
-                                                        }
-                                                    </div>
-
-                                                )}
-
-                                            </div>
-
-
-                                            {isSelected && (
-
-                                                <CheckOutlined
-                                                    style={{
-                                                        color:
-                                                            "#1677ff",
-                                                        fontSize:
-                                                            "18px",
-                                                    }}
-                                                />
-
-                                            )}
-
-                                        </button>
-
-                                    );
+                            <input
+                                id="chat-file-input"
+                                type="file"
+                                accept="image/*,.pdf,.txt,.doc,.docx,.xls,.xlsx,.zip"
+                                style={{
+                                    display:
+                                        "none",
+                                }}
+                                onChange={
+                                    handleFileSelect
                                 }
+                            />
+
+
+                            <Button
+                                size="large"
+                                icon={
+                                    <PaperClipOutlined />
+                                }
+                                onClick={() =>
+                                    document
+                                        .getElementById(
+                                            "chat-file-input"
+                                        )
+                                        ?.click()
+                                }
+                                disabled={
+                                    uploadingFile
+                                }
+                            />
+
+
+                            <Input
+                                size="large"
+                                placeholder={
+                                    selectedFile
+                                        ? selectedFile.name
+                                        : editingMessageId
+                                            ? "Edit message..."
+                                            : "Type a message..."
+                                }
+                                value={
+                                    messageText
+                                }
+                                onChange={
+                                    handleInputChange
+                                }
+                                onKeyDown={
+                                    handleKeyDown
+                                }
+                                disabled={
+                                    uploadingFile
+                                }
+                            />
+
+
+                            {editingMessageId && (
+
+                                <Button
+                                    htmlType="button"
+                                    size="large"
+                                    onClick={(event) => {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+
+                                        handleCancelEdit();
+                                    }}
+                                >
+                                    Cancel
+                                </Button>
+
                             )}
 
 
-                            {filteredUsers.length ===
-                                0 && (
+                            <Button
+                                htmlType="button"
+                                type="primary"
+                                size="large"
+                                icon={
+                                    <SendOutlined />
+                                }
+                                onClick={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
 
-                                    <div
+                                    handleSendMessage();
+                                }}
+                                loading={
+                                    uploadingFile
+                                }
+                            >
+                                {editingMessageId
+                                    ? "Update"
+                                    : "Send"}
+                            </Button>
+
+                        </footer>
+
+                    </>
+
+                ) : (
+
+                    <div
+                        style={{
+                            display:
+                                "flex",
+                            justifyContent:
+                                "center",
+                            alignItems:
+                                "center",
+                            height:
+                                "100%",
+                            color:
+                                "#888",
+                        }}
+                    >
+                        Select a conversation or
+                        click "+ New" to start a chat
+                    </div>
+
+                )}
+
+            </main>
+
+
+            {/* =================================================
+                START NEW CHAT MODAL
+            ================================================= */}
+
+            <Modal
+                title="Start New Chat"
+                open={isModalOpen}
+                onOk={
+                    handleCreateChat
+                }
+                confirmLoading={
+                    creatingChat
+                }
+                okText="Start Chat"
+                cancelText="Cancel"
+                onCancel={() => {
+                    setIsModalOpen(false);
+                    setUserSearch("");
+                    setSelectedUser(null);
+                }}
+            >
+
+                {/* USER SEARCH */}
+
+                <Input
+                    prefix={
+                        <SearchOutlined />
+                    }
+                    placeholder="Search registered users..."
+                    value={
+                        userSearch
+                    }
+                    onChange={(e) =>
+                        setUserSearch(
+                            e.target.value
+                        )
+                    }
+                    allowClear
+                    style={{
+                        marginBottom:
+                            "12px",
+                    }}
+                />
+
+
+                {/* USERS */}
+
+                {loadingUsers ? (
+
+                    <div
+                        style={{
+                            textAlign:
+                                "center",
+                            padding:
+                                "30px",
+                        }}
+                    >
+                        <Spin />
+                    </div>
+
+                ) : (
+
+                    <div
+                        style={{
+                            maxHeight:
+                                "350px",
+                            overflowY:
+                                "auto",
+                            border:
+                                "1px solid #f0f0f0",
+                            borderRadius:
+                                "8px",
+                        }}
+                    >
+
+                        {filteredUsers.map(
+                            (user) => {
+
+                                const isSelected =
+                                    String(
+                                        selectedUser?.id
+                                    ) ===
+                                    String(
+                                        user.id
+                                    );
+
+
+                                return (
+
+                                    <button
+                                        key={
+                                            user.id
+                                        }
+                                        type="button"
+                                        onClick={() =>
+                                            setSelectedUser(
+                                                user
+                                            )
+                                        }
                                         style={{
-                                            textAlign:
-                                                "center",
+                                            width:
+                                                "100%",
+                                            border:
+                                                "none",
+                                            background:
+                                                isSelected
+                                                    ? "#e6f4ff"
+                                                    : "#fff",
                                             padding:
-                                                "30px",
-                                            color:
-                                                "#888",
+                                                "12px",
+                                            display:
+                                                "flex",
+                                            alignItems:
+                                                "center",
+                                            gap:
+                                                "12px",
+                                            cursor:
+                                                "pointer",
+                                            textAlign:
+                                                "left",
+                                            borderBottom:
+                                                "1px solid #f5f5f5",
                                         }}
                                     >
-                                        No registered users found.
-                                    </div>
 
-                                )}
+                                        <Avatar
+                                            size={42}
+                                            icon={
+                                                <UserOutlined />
+                                            }
+                                        />
 
-                        </div>
 
-                    )}
+                                        <div
+                                            style={{
+                                                flex:
+                                                    1,
+                                                minWidth:
+                                                    0,
+                                            }}
+                                        >
+
+                                            <div
+                                                style={{
+                                                    fontWeight:
+                                                        600,
+                                                    color:
+                                                        "#222",
+                                                }}
+                                            >
+                                                {user.username ||
+                                                    user.name ||
+                                                    user.full_name ||
+                                                    `User #${user.id}`}
+                                            </div>
 
 
-                    {/* SELECTED USER */}
+                                            {user.email && (
 
-                    {selectedUser && (
+                                                <div
+                                                    style={{
+                                                        fontSize:
+                                                            "12px",
+                                                        color:
+                                                            "#888",
+                                                        marginTop:
+                                                            "2px",
+                                                    }}
+                                                >
+                                                    {
+                                                        user.email
+                                                    }
+                                                </div>
 
-                        <div
+                                            )}
+
+                                        </div>
+
+
+                                        {isSelected && (
+
+                                            <CheckOutlined
+                                                style={{
+                                                    color:
+                                                        "#1677ff",
+                                                    fontSize:
+                                                        "18px",
+                                                }}
+                                            />
+
+                                        )}
+
+                                    </button>
+
+                                );
+                            }
+                        )}
+
+
+                        {filteredUsers.length ===
+                            0 && (
+
+                                <div
+                                    style={{
+                                        textAlign:
+                                            "center",
+                                        padding:
+                                            "30px",
+                                        color:
+                                            "#888",
+                                    }}
+                                >
+                                    No registered users found.
+                                </div>
+
+                            )}
+
+                    </div>
+
+                )}
+
+
+                {/* SELECTED USER */}
+
+                {selectedUser && (
+
+                    <div
+                        style={{
+                            marginTop:
+                                "12px",
+                            padding:
+                                "10px",
+                            background:
+                                "#f6ffed",
+                            border:
+                                "1px solid #b7eb8f",
+                            borderRadius:
+                                "8px",
+                        }}
+                    >
+
+                        <span
                             style={{
-                                marginTop:
-                                    "12px",
-                                padding:
-                                    "10px",
-                                background:
-                                    "#f6ffed",
-                                border:
-                                    "1px solid #b7eb8f",
-                                borderRadius:
-                                    "8px",
+                                color:
+                                    "#389e0d",
                             }}
                         >
+                            Selected:{" "}
+                            <strong>
+                                {selectedUser.username ||
+                                    selectedUser.name ||
+                                    selectedUser.full_name ||
+                                    `User #${selectedUser.id}`}
+                            </strong>
+                        </span>
 
-                            <span
-                                style={{
-                                    color:
-                                        "#389e0d",
-                                }}
-                            >
-                                Selected:{" "}
-                                <strong>
-                                    {selectedUser.username ||
-                                        selectedUser.name ||
-                                        selectedUser.full_name ||
-                                        `User #${selectedUser.id}`}
-                                </strong>
-                            </span>
+                    </div>
 
-                        </div>
+                )}
 
-                    )}
-
-                </Modal>
+            </Modal>
 
         </div >
     );
