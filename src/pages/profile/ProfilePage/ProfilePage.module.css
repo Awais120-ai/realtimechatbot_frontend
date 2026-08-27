@@ -1,0 +1,81 @@
+.page {
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding: 40px 20px;
+    background: #f5f7fa;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+}
+
+.card {
+    width: 100%;
+    max-width: 700px;
+    border-radius: 16px;
+}
+
+.header {
+    margin-bottom: 10px;
+}
+
+.titleSection {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.photoSection {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+}
+
+.section {
+    margin-top: 10px;
+}
+
+.section h4 {
+    margin-bottom: 20px;
+}
+
+
+/* ============================
+   DARK MODE & RESPONSIVE
+============================ */
+
+:global(.dark-mode) .page {
+    background: #141414;
+}
+
+:global(.dark-mode) .card {
+    background: #1f1f1f;
+}
+
+@media (max-width: 768px) {
+    .page {
+        padding: 16px 12px;
+    }
+
+    .card {
+        border-radius: 12px;
+    }
+
+    .titleSection {
+        margin-bottom: 20px;
+    }
+}
+
+@media (max-width: 480px) {
+    .page {
+        padding: 10px 8px;
+    }
+
+    .card {
+        border-radius: 8px;
+        padding: 12px !important;
+    }
+
+    .titleSection h2 {
+        font-size: 20px !important;
+    }
+}

@@ -1,0 +1,665 @@
+.chatPage {
+    height: 100%;
+    height: 100dvh;
+    display: flex;
+    overflow: hidden;
+    background: #f5f7fa;
+}
+
+/* ================= SIDEBAR ================= */
+
+.sidebar {
+    width: 330px;
+    min-width: 330px;
+    height: 100%;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    background: #ffffff;
+    border-right: 1px solid #e8e8e8;
+}
+
+.sidebarHeader {
+    padding: 22px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.logo {
+    margin: 0;
+    font-size: 21px;
+    font-weight: 700;
+}
+
+.connectionStatus {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 6px;
+    font-size: 12px;
+    color: #777;
+}
+
+.onlineDot,
+.offlineDot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.onlineDot {
+    background: #52c41a;
+}
+
+.offlineDot {
+    background: #ff4d4f;
+}
+
+.searchBox {
+    padding: 16px;
+}
+
+.contactsTitle {
+    padding: 0 18px 10px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #888;
+    text-transform: uppercase;
+}
+
+.contactsList {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.contactItem {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 13px 18px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.2s ease;
+}
+
+.contactItem:hover {
+    background: #f5f5f5;
+}
+
+.selectedContact {
+    background: #e6f4ff;
+}
+
+.avatarWrapper {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.contactOnline,
+.contactOffline {
+    position: absolute;
+    right: 1px;
+    bottom: 1px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+}
+
+.contactOnline {
+    background: #52c41a;
+}
+
+.contactOffline {
+    background: #bfbfbf;
+}
+
+.contactInfo {
+    min-width: 0;
+    flex: 1;
+}
+
+.contactName {
+    font-size: 15px;
+    font-weight: 600;
+    color: #222;
+}
+
+.contactEmail {
+    display: block;
+    margin-top: 3px;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ================= CHAT AREA ================= */
+
+.chatArea {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+}
+
+.chatHeader {
+    min-height: 82px;
+    display: flex;
+    align-items: center;
+    padding: 14px 26px;
+    background: #ffffff;
+    border-bottom: 1px solid #e8e8e8;
+}
+
+.chatUserWrapper {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+}
+
+.chatUserName {
+    margin: 0 0 3px;
+    font-size: 17px;
+}
+
+/* ================= MESSAGES ================= */
+
+.messagesArea {
+    flex: 1;
+    overflow-y: auto;
+    padding: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    background: #f5f7fa;
+}
+
+.messageRow {
+    display: flex;
+    width: 100%;
+}
+
+.ownMessageRow {
+    justify-content: flex-end;
+}
+
+.otherMessageRow {
+    justify-content: flex-start;
+}
+
+.messageBubble {
+    max-width: 65%;
+    padding: 11px 14px 8px;
+    border-radius: 14px;
+    font-size: 14px;
+    line-height: 1.5;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.ownMessage {
+    color: #fff;
+    background: #1677ff;
+    border-bottom-right-radius: 4px;
+}
+
+.otherMessage {
+    color: #222;
+    background: #fff;
+    border-bottom-left-radius: 4px;
+}
+
+.messageTime {
+    display: block;
+    margin-top: 4px;
+    font-size: 10px;
+    opacity: 0.65;
+    text-align: right;
+}
+
+.chatImage {
+    max-width: 100%;
+    max-height: 320px;
+    width: auto;
+    height: auto;
+    display: block;
+    border-radius: 8px;
+    object-fit: contain;
+}
+
+
+/* ================= INPUT ================= */
+
+.messageInputArea {
+    display: flex;
+    gap: 10px;
+    padding: 16px 22px;
+    background: #ffffff;
+    border-top: 1px solid #e8e8e8;
+}
+
+.messageInputArea :global(.ant-input) {
+    flex: 1;
+}
+
+/* ================= DEBUG ================= */
+
+.debugEvent {
+    max-height: 160px;
+    padding: 10px 20px;
+    overflow: auto;
+    background: #fffbe6;
+    border-top: 1px solid #ffe58f;
+    font-size: 11px;
+}
+
+.debugEvent pre {
+    margin: 5px 0 0;
+    white-space: pre-wrap;
+}
+
+/* ================= RESPONSIVE NAVIGATION & BREAKPOINTS ================= */
+
+.mobileBackButton {
+    display: none !important;
+}
+
+.notificationPopup {
+    position: absolute;
+    top: 60px;
+    right: 20px;
+    width: 340px;
+    max-width: calc(100vw - 32px);
+    max-height: 420px;
+    overflow-y: auto;
+    background: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    padding: 10px;
+}
+
+/* Tablet / Medium Laptop (768px - 1024px) */
+@media (min-width: 768px) and (max-width: 1024px) {
+    .sidebar {
+        width: 280px;
+        min-width: 280px;
+    }
+
+    .chatHeader {
+        padding: 12px 18px;
+    }
+
+    .messagesArea {
+        padding: 20px 16px;
+    }
+
+    .messageBubble {
+        max-width: 75%;
+    }
+
+    .messageInputArea {
+        padding: 12px 16px;
+    }
+}
+
+/* Mobile Screens (< 768px) */
+@media (max-width: 767.98px) {
+    .chatPage {
+        height: 100dvh;
+    }
+
+    .mobileBackButton {
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* Mobile toggle between Sidebar and Chat Area */
+    .sidebar {
+        width: 100% !important;
+        min-width: 100% !important;
+        max-width: 100% !important;
+        border-right: none;
+    }
+
+    .sidebarHiddenMobile {
+        display: none !important;
+    }
+
+    .sidebarActiveMobile {
+        display: flex !important;
+    }
+
+    .chatArea {
+        width: 100% !important;
+        min-width: 100% !important;
+    }
+
+    .chatAreaHiddenMobile {
+        display: none !important;
+    }
+
+    .chatAreaActiveMobile {
+        display: flex !important;
+    }
+
+    .sidebarHeader {
+        padding: 14px 16px;
+    }
+
+    .searchBox {
+        padding: 10px 14px;
+    }
+
+    .contactItem {
+        padding: 12px 16px;
+    }
+
+    .contactInfo {
+        display: block !important;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .chatHeader {
+        padding: 10px 14px;
+        min-height: 64px;
+    }
+
+    .chatUserWrapper {
+        gap: 10px;
+        min-width: 0;
+        flex: 1;
+    }
+
+    .chatUserName {
+        font-size: 15px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .messagesArea {
+        padding: 14px 10px;
+        gap: 10px;
+    }
+
+    .messageBubble {
+        max-width: 88%;
+        padding: 9px 12px;
+        font-size: 13.5px;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+    }
+
+    .messageInputArea {
+        padding: 10px 12px;
+        gap: 8px;
+    }
+
+    .notificationPopup {
+        right: 12px;
+        top: 56px;
+        max-width: calc(100vw - 24px);
+    }
+}
+
+/* Small Mobile Screens (< 480px) */
+@media (max-width: 480px) {
+    .sidebarHeader {
+        padding: 12px;
+    }
+
+    .logo {
+        font-size: 18px;
+    }
+
+    .searchBox {
+        padding: 8px 12px;
+    }
+
+    .contactItem {
+        padding: 10px 12px;
+        gap: 10px;
+    }
+
+    .contactName {
+        font-size: 14px;
+    }
+
+    .chatHeader {
+        padding: 8px 10px;
+    }
+
+    .messagesArea {
+        padding: 12px 8px;
+    }
+
+    .messageBubble {
+        max-width: 92%;
+        padding: 8px 10px;
+        font-size: 13px;
+    }
+
+    .messageInputArea {
+        padding: 8px 10px;
+        gap: 6px;
+    }
+
+    .messageInputArea button {
+        padding: 0 10px;
+    }
+}
+
+
+
+
+
+/* ================= MESSAGE DELIVERY STATUS ================= */
+
+.messageSentStatus {
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    color: #8c8c8c;
+}
+
+.messageDeliveredStatus {
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    color: #ffffff;
+}
+
+.messageReadStatus {
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    color: #69c0ff;
+}
+
+
+
+
+
+
+
+/* =========================================================
+   DARK MODE
+   ========================================================= */
+
+.darkMode {
+    background: #141414;
+    color: #ffffff;
+}
+
+/* Sidebar */
+.darkMode .sidebar {
+    background: #1f1f1f;
+    border-color: #303030;
+}
+
+.darkMode .sidebarHeader {
+    border-color: #303030;
+}
+
+.darkMode .logo {
+    color: #ffffff;
+}
+
+.darkMode .contactsTitle {
+    color: #ffffff;
+}
+
+/* Search */
+.darkMode .searchBox input {
+    background: #262626;
+    color: #ffffff;
+    border-color: #434343;
+}
+
+.darkMode .searchBox input::placeholder {
+    color: #888888;
+}
+
+/* Contacts */
+.darkMode .contactsList {
+    background: #1f1f1f;
+}
+
+.darkMode .contactItem {
+    background: #1f1f1f;
+    color: #ffffff;
+    border-color: #303030;
+}
+
+.darkMode .contactItem:hover {
+    background: #2a2a2a;
+}
+
+.darkMode .selectedContact {
+    background: #15395b;
+}
+
+.darkMode .contactName {
+    color: #ffffff;
+}
+
+.darkMode .contactEmail {
+    color: #999999;
+}
+
+/* Main chat */
+.darkMode .chatArea {
+    background: #141414;
+}
+
+.darkMode .chatHeader {
+    background: #1f1f1f;
+    border-color: #303030;
+}
+
+.darkMode .chatUserName {
+    color: #ffffff;
+}
+
+/* Messages */
+.darkMode .messagesArea {
+    background: #141414;
+}
+
+.darkMode .otherMessage {
+    background: #262626;
+    color: #ffffff;
+}
+
+.darkMode .ownMessage {
+    color: #ffffff;
+}
+
+.darkMode .messageTime {
+    color: #999999;
+}
+
+/* Message input */
+.darkMode .messageInputArea {
+    background: #1f1f1f;
+    border-color: #303030;
+}
+
+.darkMode .messageInputArea input {
+    background: #262626;
+    color: #ffffff;
+    border-color: #434343;
+}
+
+.darkMode .messageInputArea input::placeholder {
+    color: #888888;
+}
+
+/* Notification popup */
+.darkMode .notificationPopup {
+    background: #1f1f1f;
+    color: #ffffff;
+}
+
+/* General text */
+.darkMode .darkText {
+    color: #ffffff;
+}
+
+
+/* =====================================================
+   PROFILE BUTTON
+===================================================== */
+
+.profileFooter {
+    margin-top: auto;
+    padding: 10px 14px;
+    border-top: 1px solid #e8e8e8;
+    background: #ffffff;
+}
+
+.profileButton {
+    width: 100%;
+    height: 46px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 0 14px;
+    border-radius: 10px;
+    font-size: 15px;
+    color: #333;
+}
+
+.profileButton:hover {
+    background: #f5f5f5;
+}
+
+
+/* =====================================================
+   DARK MODE
+===================================================== */
+
+.darkMode .profileFooter {
+    background: #1f1f1f;
+    border-top-color: #303030;
+}
+
+.darkMode .profileButton {
+    color: #ffffff;
+}
+
+.darkMode .profileButton:hover {
+    background: #303030;
+}
