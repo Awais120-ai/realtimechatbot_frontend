@@ -758,3 +758,203 @@
 .chatPage :global(.ant-spin-dot-item) {
     background-color: #00a884 !important;
 }
+
+/* =====================================================
+   INCOMING MESSAGE TOAST NOTIFICATION (WHATSAPP STYLE)
+===================================================== */
+
+.incomingToast {
+    position: fixed;
+    top: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10000;
+    width: 92%;
+    max-width: 420px;
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 16px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.12), 0 4px 12px -2px rgba(0, 0, 0, 0.06);
+    cursor: pointer;
+    user-select: none;
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease;
+    animation: incomingToastSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.incomingToast:hover {
+    transform: translate(-50%, -2px);
+    box-shadow: 0 14px 36px -4px rgba(0, 0, 0, 0.18), 0 6px 16px -2px rgba(0, 0, 0, 0.08);
+    background: rgba(255, 255, 255, 0.99);
+}
+
+.incomingToastExit {
+    animation: incomingToastSlideOut 0.25s cubic-bezier(0.4, 0, 1, 1) forwards !important;
+    pointer-events: none;
+}
+
+@keyframes incomingToastSlideIn {
+    0% {
+        opacity: 0;
+        transform: translate(-50%, -22px) scale(0.96);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translate(-50%, 0) scale(1);
+    }
+}
+
+@keyframes incomingToastSlideOut {
+    0% {
+        opacity: 1;
+        transform: translate(-50%, 0) scale(1);
+    }
+
+    100% {
+        opacity: 0;
+        transform: translate(-50%, -18px) scale(0.96);
+    }
+}
+
+.toastAvatarWrapper {
+    position: relative;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.toastAvatar {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+    font-weight: 600;
+    font-size: 15px;
+    flex-shrink: 0;
+}
+
+.toastUnreadDot {
+    position: absolute;
+    bottom: -1px;
+    right: -1px;
+    width: 11px;
+    height: 11px;
+    background: #25d366;
+    border: 2px solid #ffffff;
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.04);
+}
+
+.toastContent {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.toastHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.toastSenderName {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: #111b21;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.3;
+}
+
+.toastTime {
+    font-size: 11px;
+    font-weight: 500;
+    color: #667781;
+    flex-shrink: 0;
+}
+
+.toastMessagePreview {
+    margin: 0;
+    font-size: 12.5px;
+    color: #54656f;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.35;
+}
+
+.toastCloseBtn {
+    background: transparent;
+    border: none;
+    color: #8696a0;
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    transition: background-color 0.15s ease, color 0.15s ease;
+    flex-shrink: 0;
+    margin-left: 2px;
+}
+
+.toastCloseBtn:hover {
+    background-color: rgba(0, 0, 0, 0.06);
+    color: #111b21;
+}
+
+/* Dark Mode support for toast notification */
+.darkMode .incomingToast {
+    background: rgba(32, 44, 51, 0.96);
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 12px 36px -6px rgba(0, 0, 0, 0.6), 0 6px 16px -3px rgba(0, 0, 0, 0.4);
+}
+
+.darkMode .incomingToast:hover {
+    background: rgba(38, 52, 60, 0.98);
+    box-shadow: 0 16px 42px -4px rgba(0, 0, 0, 0.7), 0 8px 20px -2px rgba(0, 0, 0, 0.5);
+}
+
+.darkMode .toastUnreadDot {
+    border-color: #202c33;
+}
+
+.darkMode .toastSenderName {
+    color: #e9edef;
+}
+
+.darkMode .toastTime {
+    color: #8696a0;
+}
+
+.darkMode .toastMessagePreview {
+    color: #aebac1;
+}
+
+.darkMode .toastCloseBtn {
+    color: #8696a0;
+}
+
+.darkMode .toastCloseBtn:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #e9edef;
+}
+
+@media (max-width: 480px) {
+    .incomingToast {
+        top: 12px;
+        max-width: calc(100% - 24px);
+        padding: 8px 12px;
+        gap: 10px;
+        border-radius: 14px;
+    }
+}

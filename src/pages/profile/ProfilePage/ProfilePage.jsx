@@ -277,82 +277,72 @@ const ProfilePage = () => {
     // PROFILE PICTURE
     // ====================================================
 
-    const handlePhotoChange =
-        async ({ file }) => {
+    const handlePhotoChange = async ({ file }) => {
+        console.log("PROFILE PHOTO HANDLER FIRED:", file);
 
-            const selectedFile =
-                file.originFileObj ||
-                file;
+        const selectedFile =
+            file?.originFileObj || file;
 
-            if (!selectedFile) {
-                return;
+        if (!selectedFile) {
+            return;
+        }
+
+        if (!selectedFile.type?.startsWith("image/")) {
+            antMessage.error(
+                "Please select an image."
+            );
+            return;
+        }
+
+        if (selectedFile.size > 5 * 1024 * 1024) {
+            antMessage.error(
+                "Image must be smaller than 5 MB."
+            );
+            return;
+        }
+
+        try {
+
+            setUploadingPhoto(true);
+
+            const updated =
+                await uploadProfilePicture(
+                    selectedFile
+                );
+
+            if (!updated) {
+                throw new Error(
+                    "Profile picture upload returned no data."
+                );
             }
 
+            setProfile(updated);
 
-            if (
-                !selectedFile.type.startsWith(
-                    "image/"
-                )
-            ) {
+            console.log("UPDATED PROFILE AFTER UPLOAD:", updated);
 
-                antMessage.error(
-                    "Please select an image."
-                );
+            antMessage.success(
+                "Profile picture updated."
+            );
 
-                return;
-            }
+        } catch (error) {
 
+            console.error(
+                "PROFILE PHOTO ERROR:",
+                error
+            );
 
-            if (
-                selectedFile.size >
-                5 * 1024 * 1024
-            ) {
+            antMessage.error(
+                error?.response?.data?.detail ||
+                error?.message ||
+                "Unable to upload profile picture."
+            );
 
-                antMessage.error(
-                    "Image must be smaller than 5 MB."
-                );
+        } finally {
 
-                return;
-            }
+            setUploadingPhoto(false);
 
-
-            try {
-
-                setUploadingPhoto(
-                    true
-                );
-
-                const updated =
-                    await uploadProfilePicture(
-                        selectedFile
-                    );
-
-                setProfile(updated);
-
-                antMessage.success(
-                    "Profile picture updated."
-                );
-
-            } catch (error) {
-
-                console.error(
-                    "PROFILE PHOTO ERROR:",
-                    error
-                );
-
-                antMessage.error(
-                    error?.response?.data?.detail ||
-                    "Unable to upload profile picture."
-                );
-
-            } finally {
-
-                setUploadingPhoto(
-                    false
-                );
-
-            }
-        };
+        }
+    };
 
 
     // ====================================================
@@ -374,6 +364,7 @@ const ProfilePage = () => {
 
     if (loading) {
 
+
         return (
             <div
                 className={
@@ -392,6 +383,10 @@ const ProfilePage = () => {
 
     }
 
+    console.log(
+        "CURRENT PROFILE PICTURE:",
+        profile?.profile_picture
+    );
 
     return (
 
@@ -453,12 +448,11 @@ const ProfilePage = () => {
                 >
 
                     <Avatar
+                        key={profile?.profile_picture || "default-avatar"}
                         size={110}
                         src={
                             profile?.profile_picture
-                                ? getFileUrl(
-                                    profile.profile_picture
-                                )
+                                ? `http://192.168.18.83:8001${profile.profile_picture}`
                                 : undefined
                         }
                         icon={
@@ -469,21 +463,14 @@ const ProfilePage = () => {
                     <Upload
                         accept="image/*"
                         showUploadList={false}
-                        beforeUpload={() =>
-                            false
-                        }
-                        customRequest={
-                            handlePhotoChange
-                        }
+                        customRequest={handlePhotoChange}
                     >
 
                         <Button
                             icon={
                                 <CameraOutlined />
                             }
-                            loading={
-                                uploadingPhoto
-                            }
+                            loading={uploadingPhoto}
                         >
                             Change Profile Picture
                         </Button>

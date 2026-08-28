@@ -26,6 +26,7 @@ import {
     MoonOutlined,
     ArrowLeftOutlined,
     MoreOutlined,
+    CloseOutlined,
 } from "@ant-design/icons";
 
 import { useNavigate } from "react-router-dom";
@@ -126,6 +127,37 @@ const normalizeFileUrl = (fileUrl) => {
 };
 
 
+const notificationAudio = new Audio(
+    "/sound/faah-notification.mp3"
+);
+
+notificationAudio.preload = "auto";
+notificationAudio.volume = 0.7;
+
+const playMessageNotificationSound = () => {
+    try {
+        notificationAudio.currentTime = 0;
+
+        const playPromise =
+            notificationAudio.play();
+
+        if (playPromise !== undefined) {
+            playPromise.catch((error) => {
+                console.debug(
+                    "Notification sound was blocked:",
+                    error
+                );
+            });
+        }
+    } catch (error) {
+        console.error(
+            "Notification sound error:",
+            error
+        );
+    }
+};
+
+
 const getNotificationConversationId = (notification) => {
     if (!notification) {
         return null;
@@ -171,6 +203,124 @@ const ChatPage = () => {
 
     const token = getAccessToken();
     const currentUserId = getCurrentUserId(token);
+
+    const requestNotificationPermission = async () => {
+        if (!("Notification" in window)) {
+            return;
+        }
+
+        if (Notification.permission === "default") {
+            try {
+                await Notification.requestPermission();
+            } catch (error) {
+                console.error(
+                    "Notification permission error:",
+                    error
+                );
+            }
+        }
+    };
+
+
+    const initializeNotifications = async () => {
+        try {
+            if (
+                "Notification" in window &&
+                Notification.permission === "default"
+            ) {
+                await requestNotificationPermission();
+            }
+
+            unlockNotificationSound();
+        } catch (error) {
+            console.debug(
+                "Notification initialization failed:",
+                error
+            );
+        }
+    };
+
+    useEffect(() => {
+        const handleFirstInteraction = () => {
+            initializeNotifications();
+
+            window.removeEventListener(
+                "click",
+                handleFirstInteraction
+            );
+
+            window.removeEventListener(
+                "keydown",
+                handleFirstInteraction
+            );
+
+            window.removeEventListener(
+                "touchstart",
+                handleFirstInteraction
+            );
+        };
+
+        window.addEventListener(
+            "click",
+            handleFirstInteraction
+        );
+
+        window.addEventListener(
+            "keydown",
+            handleFirstInteraction
+        );
+
+        window.addEventListener(
+            "touchstart",
+            handleFirstInteraction
+        );
+
+        return () => {
+            window.removeEventListener(
+                "click",
+                handleFirstInteraction
+            );
+
+            window.removeEventListener(
+                "keydown",
+                handleFirstInteraction
+            );
+
+            window.removeEventListener(
+                "touchstart",
+                handleFirstInteraction
+            );
+        };
+    }, []);
+
+    const unlockNotificationSound = () => {
+        try {
+            notificationAudio.muted = true;
+            notificationAudio.currentTime = 0;
+
+            const playPromise =
+                notificationAudio.play();
+
+            if (playPromise !== undefined) {
+                playPromise
+                    .then(() => {
+                        notificationAudio.pause();
+                        notificationAudio.currentTime = 0;
+                        notificationAudio.muted = false;
+                    })
+                    .catch(() => {
+                        notificationAudio.muted = false;
+                    });
+            }
+        } catch (error) {
+            notificationAudio.muted = false;
+
+            console.debug(
+                "Notification sound could not be unlocked:",
+                error
+            );
+        }
+    };
 
 
 
@@ -219,6 +369,12 @@ const ChatPage = () => {
     const [selectedFile, setSelectedFile] = useState(null);
     const [uploadingFile, setUploadingFile] = useState(false);
 
+    // =====================================================
+    // ATTACHMENT PREVIEW
+    // =====================================================
+
+    const [previewAttachment, setPreviewAttachment] = useState(null);
+
     const [downloadedFiles, setDownloadedFiles] =
         useState(new Set());
 
@@ -233,6 +389,82 @@ const ChatPage = () => {
 
     const [notificationOpen, setNotificationOpen] =
         useState(false);
+
+    const [incomingToast, setIncomingToast] = useState(null);
+    const toastTimeoutRef = useRef(null);
+
+    const showIncomingNotificationToast = (notification) => {
+        if (toastTimeoutRef.current) {
+            clearTimeout(toastTimeoutRef.current);
+        }
+        setIncomingToast({
+            ...notification,
+            isExiting: false,
+        });
+        toastTimeoutRef.current = setTimeout(() => {
+            setIncomingToast((prev) => (prev ? { ...prev, isExiting: true } : null));
+            setTimeout(() => {
+                setIncomingToast(null);
+            }, 260);
+        }, 4500);
+    };
+
+    const handleDismissToast = (e) => {
+        if (e) {
+            e.stopPropagation();
+        }
+        if (toastTimeoutRef.current) {
+            clearTimeout(toastTimeoutRef.current);
+        }
+        setIncomingToast((prev) => (prev ? { ...prev, isExiting: true } : null));
+        setTimeout(() => {
+            setIncomingToast(null);
+        }, 260);
+    };
+
+    const handleToastClick = async () => {
+        if (!incomingToast) return;
+        const toastData = incomingToast;
+        handleDismissToast();
+
+        const conversationId = getNotificationConversationId(toastData);
+        if (conversationId) {
+            try {
+                let conversation = conversations.find(
+                    (item) => String(item.id) === String(conversationId)
+                );
+                if (!conversation) {
+                    const refreshed = await fetchConversations();
+                    conversation = refreshed.find(
+                        (item) => String(item.id) === String(conversationId)
+                    );
+                }
+                if (conversation) {
+                    setSelectedContact(conversation);
+                    setConversations((prev) =>
+                        prev.map((item) =>
+                            String(item.id) === String(conversationId)
+                                ? { ...item, unread_count: 0 }
+                                : item
+                        )
+                    );
+                }
+            } catch (error) {
+                console.error("Failed to open notification conversation:", error);
+            }
+        }
+    };
+
+    const formatToastTime = (createdAt) => {
+        if (!createdAt) return "Just now";
+        try {
+            const date = new Date(createdAt);
+            if (isNaN(date.getTime())) return "Just now";
+            return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        } catch {
+            return "Just now";
+        }
+    };
 
 
     /* ========================================================
@@ -333,6 +565,118 @@ const ChatPage = () => {
             selectedContact;
     }, [selectedContact]);
 
+
+
+    /* ========================================================
+   AUTO MARK OPEN CHAT NOTIFICATIONS AS READ
+   ======================================================== */
+
+    useEffect(() => {
+        const activeConversationId =
+            selectedContact?.id;
+
+        if (
+            !activeConversationId ||
+            !Array.isArray(notifications) ||
+            notifications.length === 0
+        ) {
+            return;
+        }
+
+        const unreadNotifications =
+            notifications.filter((notification) => {
+                if (notification.is_read) {
+                    return false;
+                }
+
+                const notificationConversationId =
+                    getNotificationConversationId(
+                        notification
+                    );
+
+                return (
+                    String(notificationConversationId) ===
+                    String(activeConversationId)
+                );
+            });
+
+        if (unreadNotifications.length === 0) {
+            return;
+        }
+
+        let cancelled = false;
+
+        const markOpenChatNotificationsRead =
+            async () => {
+                try {
+                    const {
+                        markNotificationAsRead,
+                    } = await import(
+                        "../../../api/notification.api"
+                    );
+
+                    const notificationIds =
+                        unreadNotifications.map(
+                            (notification) =>
+                                notification.id
+                        );
+
+                    await Promise.all(
+                        unreadNotifications.map(
+                            (notification) =>
+                                markNotificationAsRead(
+                                    notification.id
+                                )
+                        )
+                    );
+
+                    if (cancelled) {
+                        return;
+                    }
+
+                    /*
+                     * Notification list ko locally read mark karo
+                     */
+                    setNotifications((prev) =>
+                        prev.map((notification) =>
+                            notificationIds.includes(
+                                notification.id
+                            )
+                                ? {
+                                    ...notification,
+                                    is_read: true,
+                                }
+                                : notification
+                        )
+                    );
+
+                    /*
+                     * Bell counter ko instantly decrease karo
+                     */
+                    setNotificationCount((prev) =>
+                        Math.max(
+                            0,
+                            prev -
+                            unreadNotifications.length
+                        )
+                    );
+                } catch (error) {
+                    console.error(
+                        "Failed to auto-mark open chat notifications as read:",
+                        error
+                    );
+                }
+            };
+
+        markOpenChatNotificationsRead();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [
+        selectedContact?.id,
+        notifications,
+    ]);
 
     /* ========================================================
        AUTO SCROLL
@@ -583,20 +927,7 @@ const ChatPage = () => {
     };
 
 
-    /* ========================================================
-       BROWSER NOTIFICATION PERMISSION
-    ======================================================== */
 
-    useEffect(() => {
-        if (
-            "Notification" in window &&
-            Notification.permission === "default"
-        ) {
-            Notification.requestPermission().catch(
-                () => { }
-            );
-        }
-    }, []);
 
 
     /* ========================================================
@@ -984,81 +1315,60 @@ const ChatPage = () => {
                        NEW NOTIFICATION
                     ================================================= */
 
-                    if (
-                        data?.type ===
-                        "new_notification"
-                    ) {
-                        const notification =
-                            data.notification;
+                    if (data?.type === "new_notification") {
 
+                        const notification = data?.notification;
+
+                        // Safety check
                         if (!notification) {
                             return;
                         }
 
-                        setNotifications(
-                            (prev) => [
-                                notification,
-                                ...prev,
-                            ]
-                        );
-
-                        if (
-                            !notification.is_read
-                        ) {
-                            setNotificationCount(
-                                (prev) =>
-                                    prev + 1
-                            );
-                        }
-
-
                         /* ---------------------------------------------
-                           IMPORTANT FIX:
-                           Notification aate hi conversations refresh
-                           karo. Isse new chat sidebar mein aa jayegi.
+                           PLAY NOTIFICATION SOUND
                         --------------------------------------------- */
 
-                        try {
-                            await fetchConversations();
-                        } catch (error) {
-                            console.error(
-                                "Failed to refresh conversations after notification:",
-                                error
-                            );
-                        }
+                        playMessageNotificationSound();
 
+                        /* ---------------------------------------------
+                           ADD NOTIFICATION
+                        --------------------------------------------- */
+
+                        setNotifications((prev) => [
+                            notification,
+                            ...prev,
+                        ]);
+
+                        /* ---------------------------------------------
+                           UPDATE UNREAD NOTIFICATION COUNT
+                        --------------------------------------------- */
+
+                        if (!notification.is_read) {
+                            setNotificationCount((prev) => prev + 1);
+                        }
 
                         /* ---------------------------------------------
                            IN-APP NOTIFICATION
                         --------------------------------------------- */
 
-                        antMessage.info({
-                            content:
-                                notification.body ||
-                                notification.title ||
-                                "New notification",
-
-                            duration: 4,
-                        });
-
+                        showIncomingNotificationToast(notification);
 
                         /* ---------------------------------------------
                            BROWSER NOTIFICATION
                         --------------------------------------------- */
 
+                        // Browser notification
+
                         if (
-                            document.hidden &&
                             "Notification" in window &&
-                            Notification.permission ===
-                            "granted"
+                            Notification.permission === "granted"
                         ) {
                             new Notification(
-                                notification.title ||
-                                "New notification",
+                                notification.title || "New message",
                                 {
                                     body:
                                         notification.body ||
-                                        "You have a new notification.",
+                                        "You have a new message.",
                                 }
                             );
                         }
@@ -1423,200 +1733,87 @@ const ChatPage = () => {
                         // =====================================================
 
                         if (incomingConvId) {
-                            const existingConversation =
-                                conversations.find(
+                            const isCurrentConversation =
+                                incomingConvId === currentConvId;
+
+                            setConversations((prev) => {
+                                const index = prev.findIndex(
                                     (conversation) =>
                                         String(conversation.id) ===
                                         incomingConvId
                                 );
 
-                            const isCurrentConversation =
-                                incomingConvId ===
-                                currentConvId;
+                                // ==========================================
+                                // CONVERSATION ALREADY EXISTS
+                                // ==========================================
+                                if (index !== -1) {
+                                    const conversation = prev[index];
 
-                            /*
-                             * =====================================================
-                             * CONVERSATION ALREADY EXISTS
-                             * =====================================================
-                             */
+                                    const updatedConversation = {
+                                        ...conversation,
 
-                            if (existingConversation) {
-                                const updatedConversation = {
-                                    ...conversation,
+                                        ...(incomingSenderName && !isOwnMessage
+                                            ? {
+                                                display_name:
+                                                    incomingSenderName,
 
-                                    /*
-                                     * IMPORTANT:
-                                     * Agar message doosre user ne bheja hai,
-                                     * to receiver side par us sender ka naam show karo.
-                                     *
-                                     * Own message hone par existing recipient
-                                     * ka naam change nahi hoga.
-                                     */
-                                    ...(incomingSenderName && !isOwnMessage
-                                        ? {
-                                            display_name:
-                                                incomingSenderName,
+                                                other_user:
+                                                    incomingSenderUser,
 
-                                            other_user:
-                                                incomingSenderUser,
+                                                partner_user:
+                                                    incomingSenderUser,
+                                            }
+                                            : {}),
 
-                                            partner_user:
-                                                incomingSenderUser,
-                                        }
-                                        : {}),
+                                        last_message:
+                                            data.content ||
+                                            data.message ||
+                                            data.text ||
+                                            "New message",
 
-                                    last_message:
-                                        data.content ||
-                                        data.message ||
-                                        data.text ||
-                                        "New message",
+                                        last_message_at:
+                                            data.created_at ||
+                                            new Date().toISOString(),
 
-                                    last_message_at:
-                                        data.created_at ||
-                                        new Date().toISOString(),
+                                        updated_at:
+                                            data.created_at ||
+                                            new Date().toISOString(),
 
-                                    updated_at:
-                                        data.created_at ||
-                                        new Date().toISOString(),
+                                        unread_count:
+                                            !isOwnMessage &&
+                                                !isCurrentConversation
+                                                ? (
+                                                    conversation.unread_count ||
+                                                    0
+                                                ) + 1
+                                                : (
+                                                    conversation.unread_count ||
+                                                    0
+                                                ),
+                                    };
 
-                                    unread_count:
-                                        !isOwnMessage &&
-                                            !isCurrentConversation
-                                            ? (
-                                                conversation.unread_count ||
-                                                0
-                                            ) + 1
-                                            : (
-                                                conversation.unread_count ||
-                                                0
-                                            ),
-                                };
-
-
-
-                                if (
-                                    !isOwnMessage &&
-                                    incomingSenderName &&
-                                    incomingConvId === currentConvId
-                                ) {
-                                    setSelectedContact(
-                                        (currentContact) => ({
-                                            ...currentContact,
-
-                                            display_name:
-                                                incomingSenderName,
-
-                                            other_user:
-                                                incomingSenderUser,
-
-                                            partner_user:
-                                                incomingSenderUser,
-                                        })
-                                    );
+                                    // ==========================================
+                                    // MOVE LATEST CHAT TO TOP
+                                    // ==========================================
+                                    return [
+                                        updatedConversation,
+                                        ...prev.filter(
+                                            (_, i) => i !== index
+                                        ),
+                                    ];
                                 }
 
-                                /*
-                                 * WhatsApp style:
-                                 * latest conversation TOP par.
-                                 */
-                                setConversations((prev) => [
-                                    updatedConversation,
-
-                                    ...prev.filter(
-                                        (conversation) =>
-                                            String(conversation.id) !==
-                                            incomingConvId
-                                    ),
-                                ]);
-                            }
-
-                            /*
-                             * =====================================================
-                             * CONVERSATION SIDEBAR MEIN NAHI HAI
-                             * =====================================================
-                             */
-
-                            else {
-                                /*
-                                 * IMPORTANT:
-                                 * fetchConversations ko setState ke andar
-                                 * call nahi karna.
-                                 */
-                                fetchConversations()
-                                    .then((refreshedConversations) => {
-                                        if (
-                                            !Array.isArray(
-                                                refreshedConversations
-                                            )
-                                        ) {
-                                            return;
-                                        }
-
-                                        const found =
-                                            refreshedConversations.find(
-                                                (conversation) =>
-                                                    String(
-                                                        conversation.id
-                                                    ) ===
-                                                    incomingConvId
-                                            );
-
-                                        if (!found) {
-                                            return;
-                                        }
-
-                                        const updatedConversation = {
-                                            ...found,
-
-                                            last_message:
-                                                data.content ||
-                                                data.message ||
-                                                data.text ||
-                                                "New message",
-
-                                            last_message_at:
-                                                data.created_at ||
-                                                new Date().toISOString(),
-
-                                            updated_at:
-                                                data.created_at ||
-                                                new Date().toISOString(),
-
-                                            unread_count:
-                                                !isOwnMessage &&
-                                                    !isCurrentConversation
-                                                    ? Math.max(
-                                                        Number(
-                                                            found.unread_count ||
-                                                            0
-                                                        ),
-                                                        1
-                                                    )
-                                                    : Number(
-                                                        found.unread_count ||
-                                                        0
-                                                    ),
-                                        };
-
-                                        setConversations((prev) => [
-                                            updatedConversation,
-
-                                            ...prev.filter(
-                                                (conversation) =>
-                                                    String(
-                                                        conversation.id
-                                                    ) !==
-                                                    incomingConvId
-                                            ),
-                                        ]);
-                                    })
-                                    .catch((error) => {
-                                        console.error(
-                                            "Failed to refresh conversations after new message:",
-                                            error
-                                        );
-                                    });
-                            }
+                                // ==========================================
+                                // CONVERSATION NOT IN SIDEBAR
+                                // ==========================================
+                                //
+                                // IMPORTANT:
+                                // DO NOT call fetchConversations().
+                                //
+                                // Existing sidebar ko refresh nahi karna.
+                                //
+                                return prev;
+                            });
                         }
 
                         // =====================================================
@@ -2072,6 +2269,37 @@ const ChatPage = () => {
         setSelectedFile(null);
     };
 
+    const openAttachmentPreview = (
+        attachmentUrl,
+        fileName,
+        mimeType
+    ) => {
+        if (!attachmentUrl) {
+            return;
+        }
+
+        setPreviewAttachment({
+            url: attachmentUrl,
+            fileName: fileName || "Attachment",
+            mimeType: mimeType || "",
+        });
+    };
+
+    // Close attachment preview on Escape key
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.key === "Escape" && previewAttachment) {
+                setPreviewAttachment(null);
+            }
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () =>
+            window.removeEventListener(
+                "keydown",
+                handleKeyDown
+            );
+    }, [previewAttachment]);
+
 
     /* ========================================================
        FILE DOWNLOAD
@@ -2467,6 +2695,85 @@ const ChatPage = () => {
         >
 
             {/* =================================================
+                INCOMING MESSAGE TOAST NOTIFICATION
+            ================================================= */}
+            {incomingToast && (() => {
+                const toastSenderId =
+                    incomingToast?.data?.sender_id ||
+                    incomingToast?.data?.senderId ||
+                    incomingToast?.sender_id;
+                const toastSenderUser = toastSenderId
+                    ? usersMap[String(toastSenderId)]
+                    : null;
+                const toastAvatarUrl =
+                    toastSenderUser?.avatar_url ||
+                    incomingToast?.avatar_url ||
+                    null;
+                const toastSenderName =
+                    incomingToast?.title ||
+                    toastSenderUser?.username ||
+                    toastSenderUser?.name ||
+                    "New Message";
+                const toastInitial = toastSenderName.charAt(0).toUpperCase();
+
+                return (
+                    <div
+                        className={`${styles.incomingToast} ${incomingToast.isExiting ? styles.incomingToastExit : ""
+                            }`}
+                        onClick={handleToastClick}
+                        role="alert"
+                        aria-live="polite"
+                    >
+                        <div className={styles.toastAvatarWrapper}>
+                            {toastAvatarUrl ? (
+                                <Avatar
+                                    src={toastAvatarUrl}
+                                    size={38}
+                                    className={styles.toastAvatar}
+                                />
+                            ) : (
+                                <Avatar
+                                    size={38}
+                                    className={styles.toastAvatar}
+                                    style={{
+                                        backgroundColor: "#00a884",
+                                        color: "#ffffff",
+                                        fontWeight: 600,
+                                    }}
+                                >
+                                    {toastInitial || <UserOutlined />}
+                                </Avatar>
+                            )}
+                            <span className={styles.toastUnreadDot} />
+                        </div>
+
+                        <div className={styles.toastContent}>
+                            <div className={styles.toastHeader}>
+                                <span className={styles.toastSenderName}>
+                                    {toastSenderName}
+                                </span>
+                                <span className={styles.toastTime}>
+                                    {formatToastTime(incomingToast.created_at)}
+                                </span>
+                            </div>
+                            <p className={styles.toastMessagePreview}>
+                                {incomingToast.body || "You have a new message"}
+                            </p>
+                        </div>
+
+                        <button
+                            type="button"
+                            className={styles.toastCloseBtn}
+                            onClick={handleDismissToast}
+                            aria-label="Dismiss notification"
+                        >
+                            <CloseOutlined />
+                        </button>
+                    </div>
+                );
+            })()}
+
+            {/* =================================================
                 SIDEBAR
             ================================================= */}
 
@@ -2694,9 +3001,9 @@ const ChatPage = () => {
                                         <Avatar
                                             size={52}
                                             src={
-                                                conversations?.other_user?.profile_picture
+                                                contact?.other_user?.profile_picture
                                                     ? normalizeFileUrl(
-                                                        conversations.other_user.profile_picture
+                                                        contact.other_user.profile_picture
                                                     )
                                                     : undefined
                                             }
@@ -2878,7 +3185,23 @@ const ChatPage = () => {
                                     }
                                 >
                                     <Avatar
+                                        key={
+                                            selectedContact?.other_user?.profile_picture ||
+                                            selectedContact?.partner_user?.profile_picture ||
+                                            "default-avatar"
+                                        }
                                         size={48}
+                                        src={
+                                            selectedContact?.other_user?.profile_picture
+                                                ? normalizeFileUrl(
+                                                    selectedContact.other_user.profile_picture
+                                                )
+                                                : selectedContact?.partner_user?.profile_picture
+                                                    ? normalizeFileUrl(
+                                                        selectedContact.partner_user.profile_picture
+                                                    )
+                                                    : undefined
+                                        }
                                         icon={
                                             <UserOutlined />
                                         }
@@ -3544,21 +3867,31 @@ const ChatPage = () => {
                                                                     }}
                                                                 >
 
-                                                                    <a
-                                                                        href={
-                                                                            attachmentUrl
+                                                                    <div
+                                                                        onClick={() =>
+                                                                            openAttachmentPreview(
+                                                                                attachmentUrl,
+                                                                                item.file_name,
+                                                                                item.mime_type
+                                                                            )
                                                                         }
-                                                                        target="_blank"
-                                                                        rel="noopener noreferrer"
+                                                                        style={{
+                                                                            cursor: "pointer",
+                                                                            display: "inline-block",
+                                                                        }}
                                                                     >
-
                                                                         <img
                                                                             src={attachmentUrl}
                                                                             alt={item.file_name || "Image"}
-                                                                            className={styles.chatImage}
+                                                                            style={{
+                                                                                maxWidth: "280px",
+                                                                                maxHeight: "300px",
+                                                                                borderRadius: "10px",
+                                                                                display: "block",
+                                                                                objectFit: "contain",
+                                                                            }}
                                                                         />
-
-                                                                    </a>
+                                                                    </div>
 
                                                                 </div>
 
@@ -3570,25 +3903,21 @@ const ChatPage = () => {
                                                             {isFile && (
 
                                                                 <div
+                                                                    onClick={() =>
+                                                                        openAttachmentPreview(
+                                                                            attachmentUrl,
+                                                                            item.file_name,
+                                                                            item.mime_type
+                                                                        )
+                                                                    }
                                                                     style={{
-                                                                        display:
-                                                                            "flex",
-                                                                        alignItems:
-                                                                            "center",
-                                                                        gap:
-                                                                            "10px",
-                                                                        padding:
-                                                                            "10px",
-                                                                        borderRadius:
-                                                                            "8px",
-                                                                        background:
-                                                                            "rgba(0,0,0,0.05)",
-                                                                        marginBottom:
-                                                                            item.content &&
-                                                                                item.content !==
-                                                                                "Attachment"
-                                                                                ? "8px"
-                                                                                : "0",
+                                                                        display: "flex",
+                                                                        alignItems: "center",
+                                                                        gap: "10px",
+                                                                        padding: "10px",
+                                                                        borderRadius: "8px",
+                                                                        background: "rgba(0,0,0,0.05)",
+                                                                        cursor: "pointer",
                                                                     }}
                                                                 >
 
@@ -3656,16 +3985,19 @@ const ChatPage = () => {
                                                                                 href={
                                                                                     attachmentUrl
                                                                                 }
-                                                                                target="_blank"
-                                                                                rel="noopener noreferrer"
+                                                                                download={
+                                                                                    item.file_name ||
+                                                                                    "attachment"
+                                                                                }
                                                                                 onClick={(
                                                                                     event
-                                                                                ) =>
+                                                                                ) => {
+                                                                                    event.stopPropagation();
                                                                                     handleFileDownload(
                                                                                         event,
                                                                                         item.id
-                                                                                    )
-                                                                                }
+                                                                                    );
+                                                                                }}
                                                                             >
 
                                                                                 <Button
@@ -4032,6 +4364,266 @@ const ChatPage = () => {
                 )}
 
             </main>
+
+
+            {/* =================================================
+                ATTACHMENT PREVIEW MODAL
+            ================================================= */}
+
+            {previewAttachment && (() => {
+                const mime = String(
+                    previewAttachment.mimeType || ""
+                ).toLowerCase();
+
+                const isPreviewImage =
+                    mime.startsWith("image/");
+
+                const isPreviewPdf =
+                    mime === "application/pdf" ||
+                    previewAttachment.fileName
+                        ?.toLowerCase()
+                        .endsWith(".pdf");
+
+                // Files the browser can embed in an iframe
+                const isBrowserPreviewable =
+                    isPreviewImage ||
+                    isPreviewPdf ||
+                    mime.startsWith("text/") ||
+                    mime === "application/json";
+
+                return (
+                    <div
+                        style={{
+                            position: "fixed",
+                            inset: 0,
+                            zIndex: 20000,
+                            background: "rgba(0, 0, 0, 0.88)",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            justifyContent: "center",
+                        }}
+                        onClick={() =>
+                            setPreviewAttachment(null)
+                        }
+                    >
+                        {/* Header bar */}
+                        <div
+                            style={{
+                                position: "absolute",
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                height: "56px",
+                                background: "rgba(0,0,0,0.6)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                padding: "0 20px",
+                                zIndex: 1,
+                            }}
+                            onClick={(e) =>
+                                e.stopPropagation()
+                            }
+                        >
+                            <span
+                                style={{
+                                    color: "#e9edef",
+                                    fontSize: "14px",
+                                    fontWeight: 600,
+                                    maxWidth: "60%",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                }}
+                            >
+                                {previewAttachment.fileName}
+                            </span>
+
+                            <div
+                                style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "8px",
+                                }}
+                            >
+                                {/* Download button in viewer */}
+                                <a
+                                    href={
+                                        previewAttachment.url
+                                    }
+                                    download={
+                                        previewAttachment.fileName ||
+                                        "attachment"
+                                    }
+                                    onClick={(e) =>
+                                        e.stopPropagation()
+                                    }
+                                    style={{
+                                        color: "#e9edef",
+                                        fontSize: "20px",
+                                        lineHeight: 1,
+                                        padding: "6px 10px",
+                                        borderRadius: "8px",
+                                        background:
+                                            "rgba(255,255,255,0.1)",
+                                        display: "flex",
+                                        alignItems: "center",
+                                    }}
+                                    title="Download"
+                                >
+                                    <DownloadOutlined />
+                                </a>
+
+                                {/* Close button */}
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setPreviewAttachment(
+                                            null
+                                        )
+                                    }
+                                    style={{
+                                        background:
+                                            "rgba(255,255,255,0.1)",
+                                        border: "none",
+                                        borderRadius: "8px",
+                                        color: "#e9edef",
+                                        cursor: "pointer",
+                                        fontSize: "18px",
+                                        padding: "6px 10px",
+                                        display: "flex",
+                                        alignItems: "center",
+                                    }}
+                                    title="Close (Esc)"
+                                >
+                                    <CloseOutlined />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Viewer body */}
+                        <div
+                            style={{
+                                marginTop: "56px",
+                                width: "100%",
+                                height: "calc(100vh - 56px)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                overflow: "hidden",
+                                padding: isPreviewImage
+                                    ? "24px"
+                                    : "0",
+                            }}
+                            onClick={(e) =>
+                                e.stopPropagation()
+                            }
+                        >
+                            {isPreviewImage ? (
+                                <img
+                                    src={
+                                        previewAttachment.url
+                                    }
+                                    alt={
+                                        previewAttachment.fileName
+                                    }
+                                    style={{
+                                        maxWidth: "100%",
+                                        maxHeight: "100%",
+                                        objectFit: "contain",
+                                        borderRadius: "6px",
+                                        boxShadow:
+                                            "0 8px 40px rgba(0,0,0,0.6)",
+                                    }}
+                                />
+                            ) : isBrowserPreviewable ? (
+                                <iframe
+                                    src={
+                                        previewAttachment.url
+                                    }
+                                    title={
+                                        previewAttachment.fileName
+                                    }
+                                    style={{
+                                        width: "100%",
+                                        height: "100%",
+                                        border: "none",
+                                        background: "#fff",
+                                    }}
+                                />
+                            ) : (
+                                /* Unsupported type – show download prompt */
+                                <div
+                                    style={{
+                                        textAlign: "center",
+                                        color: "#e9edef",
+                                        padding: "40px",
+                                    }}
+                                >
+                                    <div
+                                        style={{
+                                            fontSize: "48px",
+                                            marginBottom: "16px",
+                                        }}
+                                    >
+                                        <FileImageOutlined />
+                                    </div>
+                                    <div
+                                        style={{
+                                            fontSize: "16px",
+                                            fontWeight: 600,
+                                            marginBottom: "8px",
+                                        }}
+                                    >
+                                        {
+                                            previewAttachment.fileName
+                                        }
+                                    </div>
+                                    <div
+                                        style={{
+                                            color: "#aebac1",
+                                            marginBottom: "20px",
+                                        }}
+                                    >
+                                        This file type cannot be
+                                        previewed in the browser.
+                                    </div>
+                                    <a
+                                        href={
+                                            previewAttachment.url
+                                        }
+                                        download={
+                                            previewAttachment.fileName ||
+                                            "attachment"
+                                        }
+                                        style={{
+                                            display:
+                                                "inline-flex",
+                                            alignItems:
+                                                "center",
+                                            gap: "8px",
+                                            background:
+                                                "#00a884",
+                                            color: "#fff",
+                                            padding:
+                                                "10px 20px",
+                                            borderRadius:
+                                                "8px",
+                                            textDecoration:
+                                                "none",
+                                            fontWeight: 600,
+                                        }}
+                                    >
+                                        <DownloadOutlined />{" "}
+                                        Download File
+                                    </a>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                );
+            })()}
 
 
             {/* =================================================
