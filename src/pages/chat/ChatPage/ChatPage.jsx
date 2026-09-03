@@ -76,6 +76,12 @@ import {
 
 import callService from "../../../services/callService";
 
+import {
+    playMessageNotificationSound,
+    startCallNotificationSound,
+    stopCallNotificationSound,
+} from "../../../services/notificationSound.service";
+
 import styles from "./ChatPage.module.css";
 
 
@@ -151,35 +157,6 @@ const normalizeFileUrl = (fileUrl) => {
 };
 
 
-const notificationAudio = new Audio(
-    "/sound/faah-notification.mp3"
-);
-
-notificationAudio.preload = "auto";
-notificationAudio.volume = 0.7;
-
-const playMessageNotificationSound = () => {
-    try {
-        notificationAudio.currentTime = 0;
-
-        const playPromise =
-            notificationAudio.play();
-
-        if (playPromise !== undefined) {
-            playPromise.catch((error) => {
-                console.debug(
-                    "Notification sound was blocked:",
-                    error
-                );
-            });
-        }
-    } catch (error) {
-        console.error(
-            "Notification sound error:",
-            error
-        );
-    }
-};
 
 
 const getNotificationConversationId = (notification) => {
@@ -480,6 +457,8 @@ const ChatPage = () => {
 
 
     const acceptIncomingCall = () => {
+
+        stopCallNotificationSound();
         if (!incomingCall) {
             return;
         }
@@ -523,6 +502,7 @@ const ChatPage = () => {
 
 
     const rejectIncomingCall = () => {
+        stopCallNotificationSound();
         if (!incomingCall) {
             return;
         }
@@ -628,6 +608,7 @@ const ChatPage = () => {
     const endCurrentCall = (
         notifyRemote = true
     ) => {
+        stopCallNotificationSound();
         const endedCallDuration =
             stopCallTimer();
 
@@ -1823,6 +1804,7 @@ const ChatPage = () => {
                             "========== INCOMING CALL =========="
                         );
                         console.log(data);
+                        startCallNotificationSound();
 
                         setIncomingCall({
                             fromUserId:
@@ -1847,6 +1829,8 @@ const ChatPage = () => {
 
                     if (data?.type === "call_reject") {
                         console.log("Call rejected by remote user.");
+
+                        stopCallNotificationSound();
 
                         endCurrentCall(false);
 
@@ -1892,6 +1876,7 @@ const ChatPage = () => {
                             "========== CALL ENDED =========="
                         );
                         console.log(data);
+                        stopCallNotificationSound();
 
                         if (localStreamRef.current) {
                             localStreamRef.current
@@ -3059,6 +3044,7 @@ const ChatPage = () => {
     ======================================================== */
 
     const handleLogout = () => {
+        stopCallNotificationSound();
         if (websocketRef.current) {
             websocketRef.current.close();
             websocketRef.current =

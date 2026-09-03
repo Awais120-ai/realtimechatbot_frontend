@@ -20,7 +20,15 @@ import {
     LockOutlined,
     LogoutOutlined,
     UserOutlined,
+    SoundOutlined,
 } from "@ant-design/icons";
+
+import {
+    getNotificationSounds,
+    getSelectedNotificationSound,
+    setSelectedNotificationSound,
+    testNotificationSound,
+} from "../../../services/notificationSound.service";
 
 import {
     useNavigate,
@@ -62,6 +70,11 @@ const ProfilePage = () => {
 
     const [profile, setProfile] =
         useState(null);
+
+    const [selectedNotificationSound, setSelectedNotificationSoundState] =
+        useState(() => {
+            return getSelectedNotificationSound();
+        });
 
 
     const [username, setUsername] =
@@ -342,6 +355,28 @@ const ProfilePage = () => {
             setUploadingPhoto(false);
 
         }
+    };
+
+
+
+    const handleNotificationSoundChange = (
+        event
+    ) => {
+
+        const soundKey =
+            event.target.value;
+
+        setSelectedNotificationSoundState(
+            soundKey
+        );
+
+        setSelectedNotificationSound(
+            soundKey
+        );
+
+        antMessage.success(
+            "Notification sound updated."
+        );
     };
 
 
@@ -655,6 +690,88 @@ const ProfilePage = () => {
 
 
                 <Divider />
+
+                {/* =====================================================
+    NOTIFICATION SETTINGS
+===================================================== */}
+
+                <div
+                    className={
+                        styles.section
+                    }
+                >
+
+                    <Title level={4}>
+                        Notification Settings
+                    </Title>
+
+                    <Text type="secondary">
+                        Choose the sound used for
+                        new messages and incoming calls.
+                    </Text>
+
+                    <div
+                        style={{
+                            marginTop: 16,
+                        }}
+                    >
+
+                        <select
+                            value={
+                                selectedNotificationSound
+                            }
+                            onChange={
+                                handleNotificationSoundChange
+                            }
+                            style={{
+                                width: "100%",
+                                padding: "10px",
+                                borderRadius: "8px",
+                                border: "1px solid #d9d9d9",
+                                fontSize: "15px",
+                            }}
+                        >
+
+                            <option value="notification">
+                                Notification Sound
+                            </option>
+
+                            <option value="message">
+                                Message Sound
+                            </option>
+
+                            <option value="whatsapp">
+                                Whatsapp Sound
+                            </option>
+
+                            <option value="cartoon">
+                                cartoon Sound
+                            </option>
+
+                            <option value="Crowd">
+                                Crowd Sound
+                            </option>
+
+                        </select>
+
+                    </div>
+
+
+                    <Button
+                        icon={
+                            <SoundOutlined />
+                        }
+                        style={{
+                            marginTop: 12,
+                        }}
+                        onClick={
+                            testNotificationSound
+                        }
+                    >
+                        Test Sound
+                    </Button>
+
+                </div>
 
 
                 {/* LOGOUT */}
