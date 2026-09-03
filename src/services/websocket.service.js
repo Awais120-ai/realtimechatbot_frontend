@@ -1,6 +1,6 @@
 import { getAccessToken } from "./token.service";
 
-const WS_BASE_URL = "ws://192.168.18.83:8001/api/v1/ws";
+const WS_BASE_URL = "/api/v1/ws";
 
 /**
  * Create Native WebSocket connection
@@ -223,6 +223,177 @@ export const sendChatMessage = (
 
     websocket.send(
         JSON.stringify(payload)
+    );
+};
+
+/**
+ * =====================================================
+ * WEBRTC CALL SIGNALING
+ * =====================================================
+ */
+
+export const sendCallInvite = (
+    websocket,
+    targetUserId,
+    conversationId,
+    callType = "audio"
+) => {
+    if (
+        !websocket ||
+        websocket.readyState !== WebSocket.OPEN
+    ) {
+        return;
+    }
+
+    websocket.send(
+        JSON.stringify({
+            type: "call_invite",
+            target_user_id: Number(targetUserId),
+            conversation_id: Number(conversationId),
+            call_type: callType,
+        })
+    );
+};
+
+export const sendCallAccept = (
+    websocket,
+    targetUserId,
+    conversationId,
+    callType = "audio"
+) => {
+    if (
+        !websocket ||
+        websocket.readyState !== WebSocket.OPEN
+    ) {
+        return;
+    }
+
+    websocket.send(
+        JSON.stringify({
+            type: "call_accept",
+            target_user_id: Number(targetUserId),
+            conversation_id: Number(conversationId),
+            call_type: callType,
+        })
+    );
+};
+
+export const sendCallReject = (
+    websocket,
+    targetUserId,
+    conversationId
+) => {
+    if (
+        !websocket ||
+        websocket.readyState !== WebSocket.OPEN
+    ) {
+        return;
+    }
+
+    websocket.send(
+        JSON.stringify({
+            type: "call_reject",
+            target_user_id: Number(targetUserId),
+            conversation_id: Number(conversationId),
+        })
+    );
+};
+
+export const sendCallEnd = (
+    websocket,
+    targetUserId,
+    conversationId,
+    duration = 0,
+    callType = "audio"
+) => {
+    if (
+        !websocket ||
+        websocket.readyState !== WebSocket.OPEN
+    ) {
+        return;
+    }
+
+    websocket.send(
+        JSON.stringify({
+            type: "call_end",
+            target_user_id: Number(targetUserId),
+            conversation_id: Number(conversationId),
+            duration: Number(duration) || 0,
+            call_type: callType || "audio",
+        })
+    );
+};
+
+export const sendWebRTCOffer = (
+    websocket,
+    targetUserId,
+    conversationId,
+    offer,
+    callType = "audio",
+    callStartedAt = null
+) => {
+    if (
+        !websocket ||
+        websocket.readyState !== WebSocket.OPEN
+    ) {
+        return;
+    }
+
+    websocket.send(
+        JSON.stringify({
+            type: "webrtc_offer",
+            target_user_id: Number(targetUserId),
+            conversation_id: Number(conversationId),
+            offer,
+            call_type: callType,
+            call_started_at: callStartedAt,
+        })
+    );
+};
+
+export const sendWebRTCAnswer = (
+    websocket,
+    targetUserId,
+    conversationId,
+    answer
+) => {
+    if (
+        !websocket ||
+        websocket.readyState !== WebSocket.OPEN
+    ) {
+        return;
+    }
+
+    websocket.send(
+        JSON.stringify({
+            type: "webrtc_answer",
+            target_user_id: Number(targetUserId),
+            conversation_id: Number(conversationId),
+            answer,
+        })
+    );
+};
+
+export const sendICECandidate = (
+    websocket,
+    targetUserId,
+    conversationId,
+    candidate
+) => {
+    if (
+        !websocket ||
+        websocket.readyState !== WebSocket.OPEN
+    ) {
+        return;
+    }
+
+    websocket.send(
+        JSON.stringify({
+            type: "webrtc_ice_candidate",
+            target_user_id: Number(targetUserId),
+            conversation_id: Number(conversationId),
+            candidate,
+        })
     );
 };
 

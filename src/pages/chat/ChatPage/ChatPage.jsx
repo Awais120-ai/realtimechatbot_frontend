@@ -27,6 +27,10 @@ import {
     ArrowLeftOutlined,
     MoreOutlined,
     CloseOutlined,
+    PhoneOutlined,
+    VideoCameraOutlined,
+    AudioMutedOutlined,
+    AudioOutlined,
 } from "@ant-design/icons";
 
 import { useNavigate } from "react-router-dom";
@@ -44,6 +48,13 @@ import {
     sendConversationRead,
     sendEditMessage,
     sendDeleteMessage,
+    sendCallInvite,
+    sendCallAccept,
+    sendCallReject,
+    sendCallEnd,
+    sendWebRTCOffer,
+    sendWebRTCAnswer,
+    sendICECandidate,
 } from "../../../services/websocket.service";
 
 import {
@@ -56,10 +67,23 @@ import {
     clearChatSession,
 } from "../../../api/chat.api";
 
+import {
+    AudioCall,
+    VideoCall,
+    IncomingCall,
+    OutgoingCall,
+} from "../../../components/calls";
+
+import callService from "../../../services/callService";
+
 import styles from "./ChatPage.module.css";
 
-const { Text } = Typography;
 
+
+
+
+
+const { Text } = Typography;
 
 /* ============================================================
    HELPERS
@@ -200,6 +224,462 @@ const ChatPage = () => {
     const messagesEndRef = useRef(null);
     const typingTimeoutRef = useRef(null);
     const selectedContactRef = useRef(null);
+
+    const peerConnectionRef = useRef(null);
+    const localStreamRef = useRef(null);
+    const remoteStreamRef = useRef(null);
+
+    const callTargetRef = useRef(null);
+    const callConversationRef = useRef(null);
+    const callTypeRef = useRef(null);
+
+    const [incomingCall, setIncomingCall] =
+        useState(null);
+
+    const [outgoingCall, setOutgoingCall] =
+        useState(null);
+
+    const [activeCall, setActiveCall] =
+        useState(false);
+
+    const [callType, setCallType] =
+        useState(null);
+
+    const [localStream, setLocalStream] =
+        useState(null);
+
+    const [remoteStream, setRemoteStream] =
+        useState(null);
+
+    const [callStatus, setCallStatus] =
+        useState(null);
+
+    const [microphoneEnabled, setMicrophoneEnabled] =
+        useState(true);
+
+    const [cameraEnabled, setCameraEnabled] =
+        useState(true);
+
+    /* ============================================================
+       CALL DURATION TIMER
+    ============================================================ */
+
+    const [callDuration, setCallDuration] =
+        useState(0);
+
+    const callStartTimeRef =
+        useRef(null);
+
+    const callTimerRef =
+        useRef(null);
+    const startOutgoingCall = (
+        targetUserId,
+        conversationId,
+        type = "audio"
+    ) => {
+        if (
+            !websocketRef.current ||
+            websocketRef.current.readyState !== WebSocket.OPEN
+        ) {
+            antMessage.error(
+                "WebSocket is not connected."
+            );
+
+            return;
+        }
+
+        if (!targetUserId || !conversationId) {
+            antMessage.error(
+                "Call target or conversation is missing."
+            );
+
+            return;
+        }
+
+        callTargetRef.current =
+            Number(targetUserId);
+
+        callConversationRef.current =
+            Number(conversationId);
+
+        callTypeRef.current = type;
+
+        setCallType(type);
+
+        setOutgoingCall({
+            targetUserId: Number(targetUserId),
+            conversationId: Number(conversationId),
+            callType: type,
+        });
+
+        setCallStatus("calling");
+
+        sendCallInvite(
+            websocketRef.current,
+            Number(targetUserId),
+            Number(conversationId),
+            type
+        );
+    };
+
+
+    const createCallerOffer = async () => {
+        try {
+            const targetUserId =
+                callTargetRef.current;
+
+            const conversationId =
+                callConversationRef.current;
+
+            if (
+                !targetUserId ||
+                !conversationId
+            ) {
+                return;
+            }
+
+            const activeCallType =
+                callTypeRef.current ||
+                callType ||
+                "audio";
+
+            const callStartedAt = Date.now();
+
+            callStartTimeRef.current =
+                callStartedAt;
+
+            setCallDuration(0);
+
+            console.log(
+                "CALL START TIMESTAMP:",
+                callStartedAt
+            );
+
+            console.log(
+                "CALLER CALL TYPE:",
+                activeCallType
+            );
+
+            const stream =
+                await callService.getLocalStream(
+                    activeCallType === "video"
+                );
+
+            localStreamRef.current = stream;
+            setLocalStream(stream);
+
+            /*
+             * Make sure an old/closed call
+             * does not interfere with this call.
+             */
+            if (peerConnectionRef.current) {
+                try {
+                    peerConnectionRef.current.close();
+                } catch (error) {
+                    console.debug(
+                        "Old peer connection was already closed."
+                    );
+                }
+
+                peerConnectionRef.current = null;
+            }
+
+            const peerConnection =
+                callService.createPeerConnection();
+
+            peerConnectionRef.current =
+                peerConnection;
+
+            callService.onRemoteStream = (
+                stream
+            ) => {
+                remoteStreamRef.current =
+                    stream;
+
+                setRemoteStream(stream);
+            };
+
+            callService.onConnectionStateChange = (
+                state
+            ) => {
+                console.log(
+                    "Caller WebRTC state:",
+                    state
+                );
+
+                if (state === "connected") {
+                    console.log(
+                        "CALL TIMER STARTING - CALLER"
+                    );
+
+                    setCallStatus("connected");
+
+                    startCallTimer(callStartedAt);
+                }
+
+                if (
+                    state === "failed" ||
+                    state === "closed"
+                ) {
+                    endCurrentCall(false);
+                }
+            };
+
+            callService.onIceCandidate = (
+                candidate
+            ) => {
+                sendICECandidate(
+                    websocketRef.current,
+                    targetUserId,
+                    conversationId,
+                    candidate
+                );
+            };
+
+            callService.addLocalTracks();
+
+            if (
+                !peerConnectionRef.current ||
+                peerConnectionRef.current.signalingState ===
+                "closed"
+            ) {
+                throw new Error(
+                    "Peer connection was closed before creating the offer."
+                );
+            }
+
+            const offer =
+                await callService.createOffer();
+
+            sendWebRTCOffer(
+                websocketRef.current,
+                targetUserId,
+                conversationId,
+                offer,
+                activeCallType,
+                callStartedAt
+            );
+
+            setOutgoingCall(null);
+            setActiveCall(true);
+            setCallStatus("connecting");
+
+        } catch (error) {
+            console.error(
+                "Failed to create caller offer:",
+                error
+            );
+
+            antMessage.error(
+                "Could not start the call."
+            );
+
+            endCurrentCall(false);
+        }
+    };
+
+
+    const acceptIncomingCall = () => {
+        if (!incomingCall) {
+            return;
+        }
+
+        const {
+            fromUserId,
+            conversationId,
+            callType: incomingCallType,
+        } = incomingCall;
+
+        callTargetRef.current =
+            Number(fromUserId);
+
+        callConversationRef.current =
+            Number(conversationId);
+
+        const activeIncomingCallType =
+            incomingCallType === "video"
+                ? "video"
+                : "audio";
+
+        callTypeRef.current =
+            activeIncomingCallType;
+
+        setCallType(
+            activeIncomingCallType
+        );
+
+        sendCallAccept(
+            websocketRef.current,
+            Number(fromUserId),
+            Number(conversationId),
+            activeIncomingCallType
+        );
+
+        setIncomingCall(null);
+
+        setActiveCall(true);
+        setCallStatus("connecting");
+    };
+
+
+    const rejectIncomingCall = () => {
+        if (!incomingCall) {
+            return;
+        }
+
+        const {
+            fromUserId,
+            conversationId,
+        } = incomingCall;
+
+        sendCallReject(
+            websocketRef.current,
+            Number(fromUserId),
+            Number(conversationId)
+        );
+
+        setIncomingCall(null);
+        setCallType(null);
+        setCallStatus(null);
+    };
+
+
+    /* ============================================================
+   CALL TIMER FUNCTIONS
+============================================================ */
+
+    const startCallTimer = (
+        startedAt = null
+    ) => {
+        //previous timer should be completely stop
+        if (callTimerRef.current) {
+            clearInterval(
+                callTimerRef.current
+            );
+
+            callTimerRef.current = null;
+        }
+        callStartTimeRef.current =
+            startedAt || Date.now();
+
+        // ever new call timer should be on 0
+        setCallDuration(0);
+
+        const updateTimer = () => {
+            if (!callStartTimeRef.current) {
+                return;
+            }
+
+            const elapsedSeconds =
+                Math.max(
+                    0,
+                    Math.floor(
+                        (Date.now() -
+                            callStartTimeRef.current) /
+                        1000
+                    )
+                );
+
+            setCallDuration(
+                elapsedSeconds
+            );
+        };
+
+        // Immediately timer calculate 
+        updateTimer();
+
+        callTimerRef.current =
+            setInterval(
+                updateTimer,
+                1000
+            );
+    };
+
+    const stopCallTimer = () => {
+        if (callTimerRef.current) {
+            clearInterval(
+                callTimerRef.current
+            );
+
+            callTimerRef.current = null;
+        }
+
+        const duration =
+            callStartTimeRef.current
+                ? Math.max(
+                    0,
+                    Math.floor(
+                        (Date.now() -
+                            callStartTimeRef.current) /
+                        1000
+                    )
+                )
+                : 0;
+
+        callStartTimeRef.current =
+            null;
+
+        setCallDuration(0);
+
+        return duration;
+    };
+
+
+    const endCurrentCall = (
+        notifyRemote = true
+    ) => {
+        const endedCallDuration =
+            stopCallTimer();
+
+        const targetUserId =
+            callTargetRef.current;
+
+        const conversationId =
+            callConversationRef.current;
+
+        if (
+            notifyRemote &&
+            websocketRef.current &&
+            websocketRef.current.readyState ===
+            WebSocket.OPEN &&
+            targetUserId &&
+            conversationId
+        ) {
+            sendCallEnd(
+                websocketRef.current,
+                Number(targetUserId),
+                Number(conversationId),
+                endedCallDuration,
+                callTypeRef.current
+            );
+        }
+
+        callService.endCall();
+
+        peerConnectionRef.current = null;
+        localStreamRef.current = null;
+        remoteStreamRef.current = null;
+
+        callTargetRef.current = null;
+        callConversationRef.current = null;
+        callTypeRef.current = null;
+
+        setLocalStream(null);
+        setRemoteStream(null);
+
+        setIncomingCall(null);
+        setOutgoingCall(null);
+
+        setActiveCall(false);
+        setCallType(null);
+        setCallStatus(null);
+
+        setMicrophoneEnabled(true);
+        setCameraEnabled(true);
+    };
+
+
+
 
     const token = getAccessToken();
     const currentUserId = getCurrentUserId(token);
@@ -360,6 +840,7 @@ const ChatPage = () => {
 
     const [messageText, setMessageText] = useState("");
     const [messages, setMessages] = useState([]);
+
 
 
     /* ========================================================
@@ -1062,6 +1543,24 @@ const ChatPage = () => {
     }, [selectedContact]);
 
 
+    const formatCallDuration = (seconds) => {
+        const totalSeconds =
+            Number(seconds) || 0;
+
+        const minutes =
+            Math.floor(totalSeconds / 60);
+
+        const remainingSeconds =
+            totalSeconds % 60;
+
+        return `${minutes
+            .toString()
+            .padStart(2, "0")}:${remainingSeconds
+                .toString()
+                .padStart(2, "0")}`;
+    };
+
+
     /* ========================================================
        CAN MODIFY MESSAGE
     ======================================================== */
@@ -1278,6 +1777,8 @@ const ChatPage = () => {
             return;
         }
 
+
+
         const websocket =
             createWebSocket({
                 onOpen: () => {
@@ -1310,6 +1811,355 @@ const ChatPage = () => {
                         return;
                     }
 
+
+                    // =====================================================
+                    // WEBRTC SIGNALING
+                    // =====================================================
+
+                    if (
+                        data?.type === "call_invite"
+                    ) {
+                        console.log(
+                            "========== INCOMING CALL =========="
+                        );
+                        console.log(data);
+
+                        setIncomingCall({
+                            fromUserId:
+                                data.from_user_id ||
+                                data.fromUserId,
+                            conversationId:
+                                data.conversation_id ||
+                                data.conversationId,
+                            callType:
+                                data.call_type ||
+                                "audio",
+                        });
+
+                        setCallType(
+                            data.call_type ||
+                            "audio"
+                        );
+
+                        return;
+                    }
+
+
+                    if (data?.type === "call_reject") {
+                        console.log("Call rejected by remote user.");
+
+                        endCurrentCall(false);
+
+                        antMessage.info("Call rejected.");
+
+                        return;
+                    }
+
+
+                    if (data?.type === "call_accept") {
+                        console.log(
+                            "========== CALL ACCEPTED =========="
+                        );
+
+                        setActiveCall(true);
+                        setCallStatus("connecting");
+
+                        await createCallerOffer();
+
+                        return;
+                    }
+
+
+                    if (
+                        data?.type === "call_reject"
+                    ) {
+                        console.log(
+                            "========== CALL REJECTED =========="
+                        );
+                        console.log(data);
+
+                        setActiveCall(false);
+                        setIncomingCall(null);
+
+                        return;
+                    }
+
+
+                    if (
+                        data?.type === "call_end"
+                    ) {
+                        console.log(
+                            "========== CALL ENDED =========="
+                        );
+                        console.log(data);
+
+                        if (localStreamRef.current) {
+                            localStreamRef.current
+                                .getTracks()
+                                .forEach((track) => {
+                                    track.stop();
+                                });
+
+                            localStreamRef.current = null;
+                        }
+
+                        if (peerConnectionRef.current) {
+                            peerConnectionRef.current.close();
+                            peerConnectionRef.current = null;
+                        }
+
+                        setActiveCall(false);
+                        setIncomingCall(null);
+                        setCallType(null);
+
+                        return;
+                    }
+
+
+                    if (data?.type === "webrtc_offer") {
+                        try {
+
+                            const receiverCallStartedAt =
+                                Number(data.call_started_at) ||
+                                Date.now();
+
+                            console.log(
+                                "RECEIVER CALL STARTED AT:",
+                                receiverCallStartedAt
+                            );
+                            const fromUserId =
+                                data.from_user_id ||
+                                data.fromUserId;
+
+                            const conversationId =
+                                data.conversation_id ||
+                                data.conversationId;
+
+                            const offer =
+                                data.offer ||
+                                data.payload?.offer;
+
+                            if (!offer) {
+                                console.error(
+                                    "WebRTC offer missing."
+                                );
+
+                                return;
+                            }
+
+                            callTargetRef.current =
+                                Number(fromUserId);
+
+                            callConversationRef.current =
+                                Number(conversationId);
+
+                            const incomingCallType =
+                                data.call_type ||
+                                data.callType ||
+                                callTypeRef.current ||
+                                callType ||
+                                "audio";
+
+                            console.log(
+                                "RECEIVER CALL TYPE:",
+                                incomingCallType
+                            );
+
+                            callTypeRef.current =
+                                incomingCallType;
+
+                            setCallType(incomingCallType);
+
+                            const stream =
+                                await callService.getLocalStream(
+                                    incomingCallType === "video"
+                                );
+
+                            localStreamRef.current = stream;
+                            setLocalStream(stream);
+
+                            const peerConnection =
+                                callService.createPeerConnection();
+
+                            peerConnectionRef.current =
+                                peerConnection;
+
+                            callService.onRemoteStream = (
+                                stream
+                            ) => {
+                                remoteStreamRef.current =
+                                    stream;
+
+                                setRemoteStream(stream);
+                            };
+
+                            callService.onConnectionStateChange = (
+                                state
+                            ) => {
+                                console.log(
+                                    "Receiver WebRTC state:",
+                                    state
+                                );
+
+                                if (state === "connected") {
+                                    console.log(
+                                        "CALL TIMER STARTING - RECEIVER"
+                                    );
+
+                                    setCallStatus("connected");
+
+                                    startCallTimer(receiverCallStartedAt);
+                                }
+
+                                if (
+                                    state === "failed" ||
+                                    state === "closed"
+                                ) {
+                                    endCurrentCall(false);
+                                }
+                            };
+
+                            callService.onIceCandidate = (
+                                candidate
+                            ) => {
+                                sendICECandidate(
+                                    websocketRef.current,
+                                    Number(fromUserId),
+                                    Number(conversationId),
+                                    candidate
+                                );
+                            };
+
+                            callService.addLocalTracks();
+
+                            await callService.setRemoteOffer(
+                                offer
+                            );
+
+                            const answer =
+                                await callService.createAnswer();
+
+                            sendWebRTCAnswer(
+                                websocketRef.current,
+                                Number(fromUserId),
+                                Number(conversationId),
+                                answer
+                            );
+
+                            setActiveCall(true);
+                            setCallStatus("connecting");
+
+                        } catch (error) {
+                            console.error(
+                                "Failed to handle WebRTC offer:",
+                                error
+                            );
+                        }
+
+                        return;
+                    }
+
+
+                    if (
+                        data?.type === "webrtc_answer"
+                    ) {
+                        console.log(
+                            "========== WEBRTC ANSWER =========="
+                        );
+
+                        console.log(
+                            "Incoming WebRTC answer:",
+                            data
+                        );
+
+                        try {
+                            const answer =
+                                data.answer ||
+                                data.payload?.answer;
+
+                            if (!answer) {
+                                console.error(
+                                    "WebRTC answer is missing:",
+                                    data
+                                );
+
+                                return;
+                            }
+
+                            if (
+                                !peerConnectionRef.current
+                            ) {
+                                console.error(
+                                    "Peer connection is not available."
+                                );
+
+                                return;
+                            }
+
+                            await callService.setRemoteAnswer(
+                                answer
+                            );
+
+                            console.log(
+                                "Remote WebRTC answer applied successfully."
+                            );
+
+                            setActiveCall(true);
+
+                        } catch (error) {
+                            console.error(
+                                "Failed to apply WebRTC answer:",
+                                error
+                            );
+                        }
+
+                        return;
+                    }
+
+
+                    if (
+                        data?.type === "webrtc_ice_candidate"
+                    ) {
+                        console.log(
+                            "========== WEBRTC ICE CANDIDATE =========="
+                        );
+
+                        console.log(
+                            "Incoming ICE candidate:",
+                            data
+                        );
+
+                        try {
+                            const candidate =
+                                data.candidate ||
+                                data.payload?.candidate;
+
+                            if (!candidate) {
+                                console.error(
+                                    "ICE candidate is missing:",
+                                    data
+                                );
+
+                                return;
+                            }
+
+                            await callService.addIceCandidate(
+                                candidate
+                            );
+
+                            console.log(
+                                "ICE candidate added successfully."
+                            );
+
+                        } catch (error) {
+                            console.error(
+                                "Failed to handle ICE candidate:",
+                                error
+                            );
+                        }
+
+                        return;
+                    }
 
                     /* =================================================
                        NEW NOTIFICATION
@@ -3259,6 +4109,55 @@ const ChatPage = () => {
                             </div>
 
 
+                            <Button
+                                type="text"
+                                icon={<PhoneOutlined />}
+                                aria-label="Audio call"
+                                onClick={() => {
+                                    const targetUserId =
+                                        selectedContact?.other_user?.id;
+
+                                    if (!targetUserId) {
+                                        antMessage.error(
+                                            "User information is missing."
+                                        );
+
+                                        return;
+                                    }
+
+                                    startOutgoingCall(
+                                        targetUserId,
+                                        selectedContact.id,
+                                        "audio"
+                                    );
+                                }}
+                            />
+
+                            <Button
+                                type="text"
+                                icon={<VideoCameraOutlined />}
+                                aria-label="Video call"
+                                onClick={() => {
+                                    const targetUserId =
+                                        selectedContact?.other_user?.id;
+
+                                    if (!targetUserId) {
+                                        antMessage.error(
+                                            "User information is missing."
+                                        );
+
+                                        return;
+                                    }
+
+                                    startOutgoingCall(
+                                        targetUserId,
+                                        selectedContact.id,
+                                        "video"
+                                    );
+                                }}
+                            />
+
+
                             {/* NOTIFICATION BUTTON */}
 
                             <div
@@ -3820,6 +4719,30 @@ const ChatPage = () => {
                                             !!attachmentUrl &&
                                             !isImage;
 
+                                        const isCall =
+                                            item.message_type === "call";
+
+                                        let callData = {};
+
+                                        if (isCall) {
+                                            try {
+                                                callData =
+                                                    typeof item.content === "string"
+                                                        ? JSON.parse(item.content)
+                                                        : item.content || {};
+                                            } catch (error) {
+                                                callData = {};
+                                            }
+                                        }
+
+                                        const callType =
+                                            callData?.call_type === "video"
+                                                ? "video"
+                                                : "audio";
+
+                                        const callDuration =
+                                            Number(callData?.duration) || 0;
+
 
                                         return (
 
@@ -4016,9 +4939,87 @@ const ChatPage = () => {
                                                             )}
 
 
+                                                            {/* CALL MESSAGE */}
+
+                                                            {item.message_type === "call" && (() => {
+
+                                                                let callData = {};
+
+                                                                try {
+                                                                    callData =
+                                                                        typeof item.content === "string"
+                                                                            ? JSON.parse(item.content)
+                                                                            : item.content || {};
+                                                                } catch (error) {
+                                                                    callData = {};
+                                                                }
+
+                                                                const callType =
+                                                                    callData?.call_type === "video"
+                                                                        ? "video"
+                                                                        : "audio";
+
+                                                                const duration =
+                                                                    Number(callData?.duration) || 0;
+
+                                                                return (
+                                                                    <div
+                                                                        style={{
+                                                                            display: "flex",
+                                                                            alignItems: "center",
+                                                                            gap: "12px",
+                                                                            minWidth: "180px",
+                                                                            padding: "8px 4px",
+                                                                        }}
+                                                                    >
+
+                                                                        <div
+                                                                            style={{
+                                                                                fontSize: "28px",
+                                                                            }}
+                                                                        >
+                                                                            {callType === "video"
+                                                                                ? "📹"
+                                                                                : "📞"}
+                                                                        </div>
+
+                                                                        <div>
+
+                                                                            <div
+                                                                                style={{
+                                                                                    fontWeight: "600",
+                                                                                    fontSize: "14px",
+                                                                                }}
+                                                                            >
+                                                                                {callType === "video"
+                                                                                    ? "Video call"
+                                                                                    : "Audio call"}
+                                                                            </div>
+
+                                                                            <div
+                                                                                style={{
+                                                                                    fontSize: "13px",
+                                                                                    opacity: 0.7,
+                                                                                    marginTop: "2px",
+                                                                                }}
+                                                                            >
+                                                                                {formatCallDuration(
+                                                                                    duration
+                                                                                )}
+                                                                            </div>
+
+                                                                        </div>
+
+                                                                    </div>
+                                                                );
+
+                                                            })()}
+
+
                                                             {/* TEXT */}
 
-                                                            {item.content &&
+                                                            {item.message_type !== "call" &&
+                                                                item.content &&
                                                                 item.content !==
                                                                 "Attachment" && (
 
@@ -4038,6 +5039,7 @@ const ChatPage = () => {
                                                     ================================================= */}
 
                                                         {isOwnMessage &&
+                                                            item.message_type !== "call" &&
                                                             canModifyMessage(
                                                                 item
                                                             ) && (
@@ -4819,7 +5821,6 @@ const ChatPage = () => {
                                         )}
 
                                     </button>
-
                                 );
                             }
                         )}
@@ -4888,7 +5889,141 @@ const ChatPage = () => {
 
             </Modal>
 
-        </div >
+            {/* =================================================
+                WEBRTC CALL UI
+            ================================================= */}
+
+            {/* Incoming Call */}
+            {
+                incomingCall && (
+                    <Modal
+                        open
+                        footer={null}
+                        closable={false}
+                        centered
+                    >
+                        <IncomingCall
+                            callType={incomingCall.callType}
+                            onAccept={acceptIncomingCall}
+                            onReject={rejectIncomingCall}
+                        />
+                    </Modal>
+                )
+            }
+
+            {/* Outgoing Call */}
+            {
+                outgoingCall && (
+                    <Modal
+                        open
+                        footer={null}
+                        closable={false}
+                        centered
+                    >
+                        <OutgoingCall
+                            callType={outgoingCall.callType}
+                            onCancel={() =>
+                                endCurrentCall(true)
+                            }
+                        />
+                    </Modal>
+                )
+            }
+
+            {/* Active Audio Call */}
+            {
+                activeCall &&
+                callType === "audio" && (
+                    <Modal
+                        open
+                        footer={null}
+                        closable={false}
+                        centered
+                        width={420}
+                    >
+                        <AudioCall
+                            remoteStream={remoteStream}
+                            microphoneEnabled={
+                                microphoneEnabled
+                            }
+                            cameraEnabled={
+                                cameraEnabled
+                            }
+                            onToggleMicrophone={() => {
+                                const next =
+                                    !microphoneEnabled;
+
+                                callService.toggleMicrophone(
+                                    next
+                                );
+
+                                setMicrophoneEnabled(
+                                    next
+                                );
+                            }}
+                            onEnd={() =>
+                                endCurrentCall(true)
+                            }
+
+                            callDuration={callDuration}
+                        />
+                    </Modal>
+                )
+            }
+
+            {/* Active Video Call */}
+            {
+                activeCall &&
+                callType === "video" && (
+                    <Modal
+                        open
+                        footer={null}
+                        closable={false}
+                        centered
+                        width={850}
+                    >
+                        <VideoCall
+                            localStream={localStream}
+                            remoteStream={remoteStream}
+                            microphoneEnabled={
+                                microphoneEnabled
+                            }
+                            cameraEnabled={
+                                cameraEnabled
+                            }
+                            onToggleMicrophone={() => {
+                                const next =
+                                    !microphoneEnabled;
+
+                                callService.toggleMicrophone(
+                                    next
+                                );
+
+                                setMicrophoneEnabled(
+                                    next
+                                );
+                            }}
+                            onToggleCamera={() => {
+                                const next =
+                                    !cameraEnabled;
+
+                                callService.toggleCamera(
+                                    next
+                                );
+
+                                setCameraEnabled(
+                                    next
+                                );
+                            }}
+                            onEnd={() =>
+                                endCurrentCall(true)
+                            }
+                            callDuration={callDuration}
+                        />
+                    </Modal>
+                )
+            }
+        </div>
     );
 };
 
