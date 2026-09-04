@@ -1,3 +1,6 @@
+@import './styles/variables.css';
+@import './styles/scrollbar.css';
+
 :root {
   --text: #111b21;
   --text-h: #111b21;
@@ -51,7 +54,7 @@
 }
 
 *, *::before, *::after {
-  box-sizing: border-border-box;
+  box-sizing: border-box;
 }
 
 html, body {

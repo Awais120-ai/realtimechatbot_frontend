@@ -4,6 +4,7 @@ import {
 } from "react";
 
 import CallControls from "./CallControls";
+import styles from "./VideoCall.module.css";
 
 const VideoCall = ({
     localStream,
@@ -36,23 +37,12 @@ const VideoCall = ({
     }, [remoteStream]);
 
     return (
-        <div
-            style={{
-                position: "relative",
-                width: "100%",
-                height: "100%",
-                background: "#000",
-            }}
-        >
+        <div className={styles.videoContainer}>
             <video
                 ref={remoteVideoRef}
                 autoPlay
                 playsInline
-                style={{
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "cover",
-                }}
+                className={styles.remoteVideo}
             />
 
             <video
@@ -60,30 +50,10 @@ const VideoCall = ({
                 autoPlay
                 muted
                 playsInline
-                style={{
-                    position: "absolute",
-                    right: 20,
-                    bottom: 80,
-                    width: 180,
-                    height: 120,
-                    objectFit: "cover",
-                    borderRadius: 10,
-                }}
+                className={styles.localVideo}
             />
 
-            <div
-                style={{
-                    position: "absolute",
-                    top: 20,
-                    left: 0,
-                    right: 0,
-                    textAlign: "center",
-                    color: "#fff",
-                    fontSize: "18px",
-                    fontWeight: "600",
-                    zIndex: 10,
-                }}
-            >
+            <div className={styles.durationBadge}>
                 {Math.floor(callDuration / 60)
                     .toString()
                     .padStart(2, "0")}
@@ -93,16 +63,7 @@ const VideoCall = ({
                     .padStart(2, "0")}
             </div>
 
-            <div
-                style={{
-                    position: "absolute",
-                    bottom: 20,
-                    left: 0,
-                    right: 0,
-                    display: "flex",
-                    justifyContent: "center",
-                }}
-            >
+            <div className={styles.controlsOverlay}>
                 <CallControls
                     microphoneEnabled={
                         microphoneEnabled

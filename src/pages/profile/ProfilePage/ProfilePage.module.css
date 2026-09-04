@@ -1,26 +1,74 @@
+/* =========================================================
+   PROFILE PAGE - WHATSAPP THEMED (LIGHT & DARK MODE)
+========================================================= */
+
 .page {
     min-height: 100vh;
     min-height: 100dvh;
     padding: 40px 20px;
-    background: #f5f7fa;
+    background-color: #efeae2;
+    background-image: radial-gradient(#d0c8be 0.75px, transparent 0.75px), radial-gradient(#d0c8be 0.75px, #efeae2 0.75px);
+    background-size: 24px 24px;
+    background-position: 0 0, 12px 12px;
     display: flex;
     justify-content: center;
     align-items: flex-start;
+    box-sizing: border-box;
+    overflow-x: hidden;
+    transition: background-color 0.2s ease;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 .card {
     width: 100%;
-    max-width: 700px;
-    border-radius: 16px;
+    max-width: 680px;
+    border-radius: 16px !important;
+    background: #ffffff !important;
+    border: 1px solid #e9edef !important;
+    box-shadow: 0 4px 20px rgba(11, 20, 26, 0.08) !important;
+    transition: all 0.2s ease;
+}
+
+.card :global(.ant-card-body) {
+    padding: 28px 32px !important;
 }
 
 .header {
-    margin-bottom: 10px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.backBtn {
+    color: #008069 !important;
+    font-size: 15px !important;
+    font-weight: 600 !important;
+    padding: 0 !important;
+    height: auto !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+}
+
+.backBtn:hover {
+    color: #00a884 !important;
 }
 
 .titleSection {
     text-align: center;
-    margin-bottom: 30px;
+    margin-bottom: 28px;
+}
+
+.titleSection :global(.ant-typography) {
+    margin: 0 0 6px !important;
+    color: #111b21 !important;
+    font-weight: 600 !important;
+}
+
+.titleSection :global(.ant-typography-secondary) {
+    color: #667781 !important;
+    font-size: 14.5px !important;
 }
 
 .photoSection {
@@ -28,36 +76,370 @@
     flex-direction: column;
     align-items: center;
     gap: 16px;
+    margin-bottom: 8px;
+}
+
+.photoSection :global(.ant-avatar) {
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    border: 3px solid #ffffff;
 }
 
 .section {
-    margin-top: 10px;
+    margin-top: 8px;
 }
 
-.section h4 {
-    margin-bottom: 20px;
+.section :global(.ant-typography) {
+    margin-bottom: 18px !important;
+    color: #111b21 !important;
+    font-weight: 600 !important;
+}
+
+.section :global(.ant-typography-secondary) {
+    color: #667781 !important;
+    font-size: 14px !important;
+    display: block !important;
+    margin-bottom: 12px !important;
+}
+
+/* Base Primary Button */
+.page :global(.ant-btn-primary) {
+    background-color: #00a884 !important;
+    border-color: #00a884 !important;
+    color: #ffffff !important;
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1) !important;
+    height: 40px !important;
+    padding: 0 22px !important;
+    transition: all 0.2s ease !important;
+}
+
+.page :global(.ant-btn-primary:hover) {
+    background-color: #008069 !important;
+    border-color: #008069 !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 12px rgba(0, 168, 132, 0.25) !important;
+}
+
+/* Base Default / Secondary Button */
+.page :global(.ant-btn:not(.ant-btn-primary):not(.ant-btn-dangerous):not(.ant-btn-link)) {
+    background: #ffffff !important;
+    border: 1px solid #d9d9d9 !important;
+    color: #111b21 !important;
+    border-radius: 8px !important;
+    font-weight: 500 !important;
+    height: 38px !important;
+    transition: all 0.2s ease !important;
+}
+
+.page :global(.ant-btn:not(.ant-btn-primary):not(.ant-btn-dangerous):not(.ant-btn-link):hover) {
+    border-color: #00a884 !important;
+    color: #00a884 !important;
+}
+
+/* Base Danger Button (Logout) */
+.page :global(.ant-btn-dangerous) {
+    background: transparent !important;
+    border: 1px solid #ff4d4f !important;
+    color: #ff4d4f !important;
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+    height: 44px !important;
+    margin-top: 12px !important;
+    transition: all 0.2s ease !important;
+}
+
+.page :global(.ant-btn-dangerous:hover) {
+    background: #fff1f0 !important;
+    border-color: #ff4d4f !important;
+    color: #ff4d4f !important;
+}
+
+/* Base Inputs */
+.page :global(.ant-input-affix-wrapper),
+.page :global(.ant-input) {
+    border-radius: 8px !important;
+}
+
+.page :global(.ant-form-item-label > label) {
+    font-weight: 500 !important;
+    color: #111b21 !important;
+}
+
+.page :global(.ant-divider) {
+    border-color: #e9edef !important;
+    margin: 24px 0 !important;
+}
+
+/* Notification Sound Select */
+.soundSelect {
+    width: 100%;
+    height: 42px;
+    padding: 0 38px 0 14px;
+    border-radius: 8px;
+    border: 1px solid #d9d9d9;
+    background-color: #ffffff;
+    color: #111b21;
+    font-size: 14.5px;
+    font-family: inherit;
+    outline: none;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23667781' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
+}
+
+.soundSelect:hover {
+    border-color: #00a884;
+}
+
+.soundSelect:focus {
+    border-color: #00a884;
+    box-shadow: 0 0 0 2px rgba(0, 168, 132, 0.2);
+}
+
+.soundSelect option {
+    background-color: #ffffff;
+    color: #111b21;
+    padding: 8px;
 }
 
 
-/* ============================
-   DARK MODE & RESPONSIVE
-============================ */
+/* =========================================================
+   DARK MODE (WHATSAPP DARK THEME)
+========================================================= */
 
-:global(.dark-mode) .page {
-    background: #141414;
+.darkMode,
+:global(.dark-mode) .page,
+:global([data-theme="dark"]) .page {
+    background-color: #0b141a !important;
+    background-image: radial-gradient(#182229 0.75px, transparent 0.75px), radial-gradient(#182229 0.75px, #0b141a 0.75px) !important;
+    color: #e9edef !important;
 }
 
-:global(.dark-mode) .card {
-    background: #1f1f1f;
+/* Dark Card */
+.darkMode .card,
+.darkMode :global(.ant-card),
+:global(.dark-mode) .card,
+:global([data-theme="dark"]) .card {
+    background: #111b21 !important;
+    border: 1px solid #222d34 !important;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5) !important;
 }
+
+.darkMode .card :global(.ant-card-body),
+.darkMode :global(.ant-card-body),
+:global(.dark-mode) .card :global(.ant-card-body) {
+    background: #111b21 !important;
+    color: #e9edef !important;
+}
+
+/* Dark Header & Link */
+.darkMode .backBtn {
+    color: #00a884 !important;
+}
+
+.darkMode .backBtn:hover {
+    color: #25d366 !important;
+}
+
+/* Dark Titles & Text */
+.darkMode :global(.ant-typography),
+.darkMode :global(.ant-typography h2),
+.darkMode :global(.ant-typography h4),
+.darkMode .titleSection :global(.ant-typography),
+.darkMode .section :global(.ant-typography),
+:global(.dark-mode) .titleSection :global(.ant-typography),
+:global(.dark-mode) .section :global(.ant-typography) {
+    color: #e9edef !important;
+}
+
+.darkMode :global(.ant-typography.ant-typography-secondary),
+.darkMode :global(.ant-typography-secondary),
+.darkMode .titleSection :global(.ant-typography-secondary),
+.darkMode .section :global(.ant-typography-secondary),
+:global(.dark-mode) .titleSection :global(.ant-typography-secondary) {
+    color: #8696a0 !important;
+}
+
+/* Dark Form Labels */
+.darkMode :global(.ant-form-item-label > label),
+:global(.dark-mode) .page :global(.ant-form-item-label > label) {
+    color: #e9edef !important;
+}
+
+/* Dark Avatar */
+.darkMode .photoSection :global(.ant-avatar),
+:global(.dark-mode) .photoSection :global(.ant-avatar) {
+    background: #202c33 !important;
+    color: #aebac1 !important;
+    border: 3px solid #222d34 !important;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Dark Dividers */
+.darkMode :global(.ant-divider),
+:global(.dark-mode) .page :global(.ant-divider) {
+    border-color: #222d34 !important;
+}
+
+/* Dark Input Fields */
+.darkMode :global(.ant-input-affix-wrapper),
+.darkMode :global(.ant-input),
+:global(.dark-mode) .page :global(.ant-input-affix-wrapper),
+:global(.dark-mode) .page :global(.ant-input) {
+    background: #202c33 !important;
+    border: 1px solid #2a3942 !important;
+    border-radius: 8px !important;
+    color: #e9edef !important;
+    box-shadow: none !important;
+    transition: all 0.2s ease !important;
+}
+
+.darkMode :global(.ant-input-affix-wrapper:hover),
+.darkMode :global(.ant-input:hover),
+:global(.dark-mode) .page :global(.ant-input-affix-wrapper:hover),
+:global(.dark-mode) .page :global(.ant-input:hover) {
+    border-color: #00a884 !important;
+}
+
+.darkMode :global(.ant-input-affix-wrapper-focused),
+.darkMode :global(.ant-input:focus),
+:global(.dark-mode) .page :global(.ant-input-affix-wrapper-focused),
+:global(.dark-mode) .page :global(.ant-input:focus) {
+    border-color: #00a884 !important;
+    box-shadow: 0 0 0 2px rgba(0, 168, 132, 0.25) !important;
+    background: #202c33 !important;
+}
+
+.darkMode :global(.ant-input-affix-wrapper input.ant-input),
+:global(.dark-mode) .page :global(.ant-input-affix-wrapper input.ant-input) {
+    background: transparent !important;
+    color: #e9edef !important;
+}
+
+.darkMode :global(.ant-input-prefix),
+:global(.dark-mode) .page :global(.ant-input-prefix) {
+    color: #8696a0 !important;
+    margin-right: 10px !important;
+}
+
+.darkMode :global(.ant-input-suffix),
+.darkMode :global(.ant-input-password-icon),
+:global(.dark-mode) .page :global(.ant-input-suffix),
+:global(.dark-mode) .page :global(.ant-input-password-icon) {
+    color: #8696a0 !important;
+}
+
+.darkMode :global(.ant-input-password-icon:hover),
+:global(.dark-mode) .page :global(.ant-input-password-icon:hover) {
+    color: #e9edef !important;
+}
+
+.darkMode :global(.ant-input::placeholder),
+:global(.dark-mode) .page :global(.ant-input::placeholder) {
+    color: #667781 !important;
+}
+
+/* Dark Disabled Input (Email) */
+.darkMode :global(.ant-input-disabled),
+.darkMode :global(.ant-input[disabled]),
+.darkMode :global(.ant-input-affix-wrapper-disabled),
+:global(.dark-mode) .page :global(.ant-input-disabled),
+:global(.dark-mode) .page :global(.ant-input[disabled]) {
+    background: #182229 !important;
+    border-color: #222d34 !important;
+    color: #8696a0 !important;
+    cursor: not-allowed !important;
+}
+
+/* Dark Default Buttons ("Change Profile Picture", "Test Sound") */
+.darkMode :global(.ant-btn:not(.ant-btn-primary):not(.ant-btn-dangerous):not(.ant-btn-link)),
+:global(.dark-mode) .page :global(.ant-btn:not(.ant-btn-primary):not(.ant-btn-dangerous):not(.ant-btn-link)) {
+    background: #202c33 !important;
+    border: 1px solid #2a3942 !important;
+    color: #e9edef !important;
+    border-radius: 8px !important;
+    font-weight: 500 !important;
+}
+
+.darkMode :global(.ant-btn:not(.ant-btn-primary):not(.ant-btn-dangerous):not(.ant-btn-link):hover),
+:global(.dark-mode) .page :global(.ant-btn:not(.ant-btn-primary):not(.ant-btn-dangerous):not(.ant-btn-link):hover) {
+    background: #2a3942 !important;
+    border-color: #00a884 !important;
+    color: #00a884 !important;
+}
+
+/* Dark Primary Button Hover */
+.darkMode :global(.ant-btn-primary) {
+    box-shadow: 0 2px 8px rgba(0, 168, 132, 0.3) !important;
+}
+
+/* Dark Danger Button (Logout) */
+.darkMode :global(.ant-btn-dangerous),
+:global(.dark-mode) .page :global(.ant-btn-dangerous) {
+    background: rgba(234, 0, 56, 0.12) !important;
+    border: 1px solid rgba(234, 0, 56, 0.4) !important;
+    color: #ff5b6b !important;
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+    transition: all 0.2s ease !important;
+}
+
+.darkMode :global(.ant-btn-dangerous:hover),
+:global(.dark-mode) .page :global(.ant-btn-dangerous:hover) {
+    background: rgba(234, 0, 56, 0.24) !important;
+    border-color: #ea0038 !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 16px rgba(234, 0, 56, 0.35) !important;
+}
+
+/* Dark Notification Sound Select */
+.darkMode .soundSelect,
+:global(.dark-mode) .soundSelect {
+    background-color: #202c33 !important;
+    border-color: #2a3942 !important;
+    color: #e9edef !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238696a0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+}
+
+.darkMode .soundSelect:hover,
+:global(.dark-mode) .soundSelect:hover {
+    border-color: #00a884 !important;
+}
+
+.darkMode .soundSelect:focus,
+:global(.dark-mode) .soundSelect:focus {
+    border-color: #00a884 !important;
+    box-shadow: 0 0 0 2px rgba(0, 168, 132, 0.25) !important;
+}
+
+.darkMode .soundSelect option,
+:global(.dark-mode) .soundSelect option {
+    background-color: #202c33 !important;
+    color: #e9edef !important;
+}
+
+
+/* =========================================================
+   RESPONSIVE LAYOUT
+========================================================= */
 
 @media (max-width: 768px) {
     .page {
-        padding: 16px 12px;
+        padding: 20px 14px;
     }
 
     .card {
-        border-radius: 12px;
+        border-radius: 14px !important;
+    }
+
+    .card :global(.ant-card-body) {
+        padding: 20px 18px !important;
     }
 
     .titleSection {
@@ -67,15 +449,27 @@
 
 @media (max-width: 480px) {
     .page {
-        padding: 10px 8px;
+        padding: 12px 8px;
     }
 
     .card {
-        border-radius: 8px;
-        padding: 12px !important;
+        border-radius: 10px !important;
     }
 
-    .titleSection h2 {
-        font-size: 20px !important;
+    .card :global(.ant-card-body) {
+        padding: 16px 12px !important;
+    }
+
+    .titleSection :global(.ant-typography h2) {
+        font-size: 22px !important;
+    }
+
+    .section :global(.ant-typography h4) {
+        font-size: 16px !important;
+    }
+
+    .page :global(.ant-btn-primary),
+    .page :global(.ant-btn-dangerous) {
+        width: 100% !important;
     }
 }

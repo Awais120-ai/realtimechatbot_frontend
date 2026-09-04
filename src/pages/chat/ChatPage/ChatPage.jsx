@@ -8,6 +8,8 @@ import {
     Spin,
     Modal,
     Dropdown,
+    ConfigProvider,
+    theme,
     message as antMessage,
 } from "antd";
 
@@ -31,6 +33,9 @@ import {
     VideoCameraOutlined,
     AudioMutedOutlined,
     AudioOutlined,
+    DeleteOutlined,
+    CaretRightOutlined,
+    PauseOutlined,
 } from "@ant-design/icons";
 
 import { useNavigate } from "react-router-dom";
@@ -83,6 +88,7 @@ import {
 } from "../../../services/notificationSound.service";
 
 import styles from "./ChatPage.module.css";
+import VoiceMessagePlayer from "../../../components/chat/VoiceMessagePlayer";
 
 
 
@@ -209,6 +215,7 @@ const ChatPage = () => {
     const callTargetRef = useRef(null);
     const callConversationRef = useRef(null);
     const callTypeRef = useRef(null);
+    const callInitiatorRef = useRef(null);
 
     const [incomingCall, setIncomingCall] =
         useState(null);
@@ -281,6 +288,9 @@ const ChatPage = () => {
 
         callTypeRef.current = type;
 
+        callInitiatorRef.current =
+            Number(currentUserId);
+
         setCallType(type);
 
         setOutgoingCall({
@@ -300,7 +310,9 @@ const ChatPage = () => {
     };
 
 
-    const createCallerOffer = async () => {
+    const createCallerOffer = async (
+        startedAt = null
+    ) => {
         try {
             const targetUserId =
                 callTargetRef.current;
@@ -320,12 +332,13 @@ const ChatPage = () => {
                 callType ||
                 "audio";
 
-            const callStartedAt = Date.now();
+            const callStartedAt =
+                startedAt ||
+                callStartTimeRef.current ||
+                Date.now();
 
             callStartTimeRef.current =
                 callStartedAt;
-
-            setCallDuration(0);
 
             console.log(
                 "CALL START TIMESTAMP:",
@@ -386,12 +399,10 @@ const ChatPage = () => {
 
                 if (state === "connected") {
                     console.log(
-                        "CALL TIMER STARTING - CALLER"
+                        "CALL CONNECTED - CALLER"
                     );
 
                     setCallStatus("connected");
-
-                    startCallTimer(callStartedAt);
                 }
 
                 if (
@@ -469,6 +480,9 @@ const ChatPage = () => {
             callType: incomingCallType,
         } = incomingCall;
 
+        callInitiatorRef.current =
+            Number(fromUserId);
+
         callTargetRef.current =
             Number(fromUserId);
 
@@ -485,6 +499,16 @@ const ChatPage = () => {
 
         setCallType(
             activeIncomingCallType
+        );
+
+        const callStartedAt =
+            Date.now();
+
+        callStartTimeRef.current =
+            callStartedAt;
+
+        startCallTimer(
+            callStartedAt
         );
 
         sendCallAccept(
@@ -525,8 +549,8 @@ const ChatPage = () => {
 
 
     /* ============================================================
-   CALL TIMER FUNCTIONS
-============================================================ */
+      CALL TIMER FUNCTIONS
+    ============================================================ */
 
     const startCallTimer = (
         startedAt = null
@@ -631,7 +655,8 @@ const ChatPage = () => {
                 Number(targetUserId),
                 Number(conversationId),
                 endedCallDuration,
-                callTypeRef.current
+                callTypeRef.current,
+                callInitiatorRef.current
             );
         }
 
@@ -644,6 +669,7 @@ const ChatPage = () => {
         callTargetRef.current = null;
         callConversationRef.current = null;
         callTypeRef.current = null;
+        callInitiatorRef.current = null;
 
         setLocalStream(null);
         setRemoteStream(null);
@@ -831,6 +857,441 @@ const ChatPage = () => {
     const [selectedFile, setSelectedFile] = useState(null);
     const [uploadingFile, setUploadingFile] = useState(false);
 
+
+    // =====================================================
+    // VOICE MESSAGE
+    // =====================================================
+
+    const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+    const [voiceRecordingDuration, setVoiceRecordingDuration] = useState(0);
+    const [recordedVoice, setRecordedVoice] = useState(null); // { blob, url, duration, file }
+    const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
+    const [previewCurrentTime, setPreviewCurrentTime] = useState(0);
+
+    const mediaRecorderRef = useRef(null);
+    const audioChunksRef = useRef([]);
+    const voiceStreamRef = useRef(null);
+    const voiceRecordingIntervalRef = useRef(null);
+    const voiceRecordingDurationRef = useRef(0);
+    const previewAudioRef = useRef(null);
+
+    const getSupportedAudioMimeType = () => {
+        if (typeof MediaRecorder === "undefined") return "";
+        const types = [
+            "audio/webm;codecs=opus",
+            "audio/webm",
+            "audio/ogg;codecs=opus",
+            "audio/ogg",
+            "audio/mp4",
+        ];
+        for (const type of types) {
+            if (MediaRecorder.isTypeSupported(type)) {
+                return type;
+            }
+        }
+        return "";
+    };
+
+    const formatVoiceTime = (totalSeconds) => {
+        if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return "00:00";
+        const mins = Math.floor(totalSeconds / 60);
+        const secs = Math.floor(totalSeconds % 60);
+        return `${mins < 10 ? "0" : ""}${mins}:${secs < 10 ? "0" : ""}${secs}`;
+    };
+
+    const cleanupVoiceStream = () => {
+        if (voiceStreamRef.current) {
+            voiceStreamRef.current.getTracks().forEach((track) => track.stop());
+            voiceStreamRef.current = null;
+        }
+        if (voiceRecordingIntervalRef.current) {
+            clearInterval(voiceRecordingIntervalRef.current);
+            voiceRecordingIntervalRef.current = null;
+        }
+        setIsRecordingVoice(false);
+    };
+
+    const cancelVoiceRecording = () => {
+        if (mediaRecorderRef.current) {
+            mediaRecorderRef.current.ondataavailable = null;
+            mediaRecorderRef.current.onstop = null;
+            mediaRecorderRef.current.onerror = null;
+            if (mediaRecorderRef.current.state !== "inactive") {
+                try {
+                    mediaRecorderRef.current.stop();
+                } catch (e) {
+                    // ignore
+                }
+            }
+            mediaRecorderRef.current = null;
+        }
+        audioChunksRef.current = [];
+        cleanupVoiceStream();
+        setVoiceRecordingDuration(0);
+        voiceRecordingDurationRef.current = 0;
+    };
+
+    const startVoiceRecording = async () => {
+        try {
+            if (
+                !navigator.mediaDevices ||
+                !navigator.mediaDevices.getUserMedia
+            ) {
+                antMessage.error(
+                    "Microphone recording is not supported in this browser."
+                );
+                return;
+            }
+
+            if (typeof MediaRecorder === "undefined") {
+                antMessage.error(
+                    "MediaRecorder is not supported in this browser."
+                );
+                return;
+            }
+
+            // Pause any other playing audios
+            window.dispatchEvent(
+                new CustomEvent("app:pause-other-audios", {
+                    detail: { id: "composer-recording" },
+                })
+            );
+
+            // Discard any existing preview
+            if (recordedVoice?.url) {
+                URL.revokeObjectURL(recordedVoice.url);
+                setRecordedVoice(null);
+            }
+
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: true,
+            });
+            voiceStreamRef.current = stream;
+            audioChunksRef.current = [];
+
+            const mimeType = getSupportedAudioMimeType();
+            const options = mimeType ? { mimeType } : undefined;
+            const mediaRecorder = new MediaRecorder(stream, options);
+            mediaRecorderRef.current = mediaRecorder;
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data && event.data.size > 0) {
+                    audioChunksRef.current.push(event.data);
+                }
+            };
+
+            mediaRecorder.onerror = (err) => {
+                console.error("MediaRecorder error:", err);
+                antMessage.error("Voice recording encountered an error.");
+                cancelVoiceRecording();
+            };
+
+            mediaRecorder.start(200);
+            setIsRecordingVoice(true);
+            setVoiceRecordingDuration(0);
+            voiceRecordingDurationRef.current = 0;
+
+            if (voiceRecordingIntervalRef.current) {
+                clearInterval(voiceRecordingIntervalRef.current);
+            }
+            voiceRecordingIntervalRef.current = setInterval(() => {
+                voiceRecordingDurationRef.current += 1;
+                setVoiceRecordingDuration((prev) => prev + 1);
+            }, 1000);
+        } catch (error) {
+            console.error("Microphone access error:", error);
+            if (
+                error.name === "NotAllowedError" ||
+                error.name === "PermissionDeniedError"
+            ) {
+                antMessage.error("Microphone permission was denied.");
+            } else {
+                antMessage.error(
+                    "Microphone access error: " +
+                    (error.message || "Failed to start recording")
+                );
+            }
+            cleanupVoiceStream();
+        }
+    };
+
+    const stopRecordingToPreview = () => {
+        if (!mediaRecorderRef.current || mediaRecorderRef.current.state === "inactive") {
+            return;
+        }
+
+        const finalDuration = Math.max(1, voiceRecordingDurationRef.current || 1);
+
+        mediaRecorderRef.current.onstop = () => {
+            const mimeType = mediaRecorderRef.current?.mimeType || "audio/webm";
+            const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+            const ext = mimeType.includes("mp4")
+                ? "mp4"
+                : mimeType.includes("ogg")
+                    ? "ogg"
+                    : "webm";
+            const audioFile = new File(
+                [audioBlob],
+                `voice-message-${Date.now()}.${ext}`,
+                { type: mimeType }
+            );
+            const audioUrl = URL.createObjectURL(audioBlob);
+
+            setRecordedVoice({
+                blob: audioBlob,
+                url: audioUrl,
+                duration: finalDuration,
+                file: audioFile,
+            });
+
+            cleanupVoiceStream();
+            audioChunksRef.current = [];
+        };
+
+        try {
+            mediaRecorderRef.current.stop();
+        } catch (err) {
+            console.error("Error stopping MediaRecorder:", err);
+            cancelVoiceRecording();
+        }
+    };
+
+    const discardVoicePreview = () => {
+        if (recordedVoice?.url) {
+            URL.revokeObjectURL(recordedVoice.url);
+        }
+        if (previewAudioRef.current) {
+            previewAudioRef.current.pause();
+            previewAudioRef.current.removeAttribute("src");
+            previewAudioRef.current.load();
+        }
+        setRecordedVoice(null);
+        setIsPreviewPlaying(false);
+        setPreviewCurrentTime(0);
+    };
+
+    const stopRecordingAndSend = () => {
+        if (!mediaRecorderRef.current || mediaRecorderRef.current.state === "inactive") {
+            return;
+        }
+
+        mediaRecorderRef.current.onstop = async () => {
+            const mimeType = mediaRecorderRef.current?.mimeType || "audio/webm";
+            const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+            if (!audioBlob || audioBlob.size === 0) {
+                cleanupVoiceStream();
+                audioChunksRef.current = [];
+                antMessage.warning("Recording was too short.");
+                return;
+            }
+
+            const ext = mimeType.includes("mp4")
+                ? "mp4"
+                : mimeType.includes("ogg")
+                    ? "ogg"
+                    : "webm";
+            const audioFile = new File(
+                [audioBlob],
+                `voice-message-${Date.now()}.${ext}`,
+                { type: mimeType }
+            );
+
+            cleanupVoiceStream();
+            audioChunksRef.current = [];
+
+            await uploadAndSendVoiceFile(audioFile);
+        };
+
+        try {
+            mediaRecorderRef.current.stop();
+        } catch (err) {
+            console.error("Error stopping MediaRecorder:", err);
+            cancelVoiceRecording();
+        }
+    };
+
+    const sendRecordedVoice = async () => {
+        if (!recordedVoice?.file) return;
+        const fileToSend = recordedVoice.file;
+        discardVoicePreview();
+        await uploadAndSendVoiceFile(fileToSend);
+    };
+
+    const uploadAndSendVoiceFile = async (audioFile) => {
+        if (!selectedContact?.id) {
+            antMessage.error("No conversation selected!");
+            return;
+        }
+
+        if (
+            !websocketRef.current ||
+            websocketRef.current.readyState !== WebSocket.OPEN
+        ) {
+            antMessage.error("WebSocket is not connected!");
+            return;
+        }
+
+        try {
+            setUploadingFile(true);
+
+            const formData = new FormData();
+            formData.append("file", audioFile);
+
+            const uploadResponse = await uploadChatFile(formData);
+
+            const uploadedFile =
+                uploadResponse?.data ||
+                uploadResponse?.file ||
+                uploadResponse?.attachment ||
+                uploadResponse;
+
+            const fileUrl =
+                uploadedFile?.file_url ||
+                uploadedFile?.url ||
+                uploadedFile?.path ||
+                uploadedFile?.file_path ||
+                null;
+
+            if (!fileUrl) {
+                antMessage.error(
+                    "Voice upload succeeded, but server did not return file URL."
+                );
+                return;
+            }
+
+            const fileName =
+                uploadedFile?.file_name ||
+                uploadedFile?.filename ||
+                audioFile.name ||
+                "voice-message.webm";
+
+            const fileSize =
+                uploadedFile?.file_size ??
+                uploadedFile?.size ??
+                audioFile.size ??
+                null;
+
+            const mimeType =
+                uploadedFile?.mime_type ||
+                uploadedFile?.content_type ||
+                audioFile.type ||
+                "audio/webm";
+
+            sendChatMessage(
+                websocketRef.current,
+                selectedContact.id,
+                "Voice message",
+                {
+                    message_type: "audio",
+                    file_url: fileUrl,
+                    file_name: fileName,
+                    file_size: fileSize,
+                    mime_type: mimeType,
+                }
+            );
+
+            // Update conversation sidebar locally
+            setConversations((prev) => {
+                const selectedConversationId = String(selectedContact.id);
+                const currentConversation = prev.find(
+                    (conversation) =>
+                        String(conversation.id) === selectedConversationId
+                );
+
+                if (!currentConversation) return prev;
+
+                const remainingConversations = prev.filter(
+                    (conversation) =>
+                        String(conversation.id) !== selectedConversationId
+                );
+
+                return [
+                    {
+                        ...currentConversation,
+                        last_message: "Voice message",
+                        last_message_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString(),
+                        unread_count: currentConversation.unread_count || 0,
+                    },
+                    ...remainingConversations,
+                ];
+            });
+        } catch (error) {
+            console.error("Failed to upload/send voice message:", error);
+            antMessage.error("Failed to send voice message. Please try again.");
+        } finally {
+            setUploadingFile(false);
+        }
+    };
+
+    const togglePreviewPlayback = () => {
+        const audio = previewAudioRef.current;
+        if (!audio) return;
+        if (isPreviewPlaying) {
+            audio.pause();
+            setIsPreviewPlaying(false);
+        } else {
+            // Pause any other voice messages in chat
+            window.dispatchEvent(
+                new CustomEvent("app:pause-other-audios", {
+                    detail: { id: "composer-preview" },
+                })
+            );
+            audio
+                .play()
+                .then(() => setIsPreviewPlaying(true))
+                .catch((err) => {
+                    console.warn("Preview playback error:", err);
+                    setIsPreviewPlaying(false);
+                });
+        }
+    };
+
+    const seekPreviewPlayback = (e) => {
+        const audio = previewAudioRef.current;
+        if (!audio || !recordedVoice?.duration) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        const ratio = Math.max(
+            0,
+            Math.min(1, (e.clientX - rect.left) / rect.width)
+        );
+        const newTime = ratio * recordedVoice.duration;
+        audio.currentTime = newTime;
+        setPreviewCurrentTime(newTime);
+    };
+
+    // Pause composer preview when any chat voice message starts playing
+    useEffect(() => {
+        const handlePauseOthers = (event) => {
+            if (event.detail?.id !== "composer-preview") {
+                if (previewAudioRef.current && !previewAudioRef.current.paused) {
+                    previewAudioRef.current.pause();
+                    setIsPreviewPlaying(false);
+                }
+            }
+        };
+
+        window.addEventListener("app:pause-other-audios", handlePauseOthers);
+        return () => {
+            window.removeEventListener("app:pause-other-audios", handlePauseOthers);
+        };
+    }, []);
+
+    // Cleanup voice resources on unmount
+    useEffect(() => {
+        return () => {
+            cleanupVoiceStream();
+            if (recordedVoice?.url) {
+                URL.revokeObjectURL(recordedVoice.url);
+            }
+            if (previewAudioRef.current) {
+                previewAudioRef.current.pause();
+                previewAudioRef.current.removeAttribute("src");
+                previewAudioRef.current.load();
+            }
+        };
+    }, []);
+
     // =====================================================
     // ATTACHMENT PREVIEW
     // =====================================================
@@ -856,19 +1317,41 @@ const ChatPage = () => {
     const toastTimeoutRef = useRef(null);
 
     const showIncomingNotificationToast = (notification) => {
+
         if (toastTimeoutRef.current) {
+
             clearTimeout(toastTimeoutRef.current);
+
         }
-        setIncomingToast({
+
+        const toastNotification = {
             ...notification,
+            body:
+                notification?.body &&
+                    String(notification.body).length > 15
+                    ? `${String(notification.body).slice(0, 15)}...`
+                    : notification?.body,
             isExiting: false,
-        });
+        };
+
+        setIncomingToast(toastNotification);
+
         toastTimeoutRef.current = setTimeout(() => {
-            setIncomingToast((prev) => (prev ? { ...prev, isExiting: true } : null));
+
+            setIncomingToast((prev) => (
+                prev
+                    ? { ...prev, isExiting: true }
+                    : null
+            ));
+
             setTimeout(() => {
+
                 setIncomingToast(null);
+
             }, 260);
+
         }, 4500);
+
     };
 
     const handleDismissToast = (e) => {
@@ -1017,6 +1500,17 @@ const ChatPage = () => {
         });
     };
 
+    useEffect(() => {
+        document.body.classList.toggle("dark-mode", Boolean(darkMode));
+        document.documentElement.setAttribute(
+            "data-theme",
+            darkMode ? "dark" : "light"
+        );
+        return () => {
+            document.body.classList.remove("dark-mode");
+        };
+    }, [darkMode]);
+
 
     /* ========================================================
        KEEP SELECTED CONTACT REF UPDATED
@@ -1025,7 +1519,15 @@ const ChatPage = () => {
     useEffect(() => {
         selectedContactRef.current =
             selectedContact;
-    }, [selectedContact]);
+
+        // Discard any in-progress recording or preview if user switches chats
+        if (isRecordingVoice) {
+            cancelVoiceRecording();
+        }
+        if (recordedVoice) {
+            discardVoicePreview();
+        }
+    }, [selectedContact?.id]);
 
 
 
@@ -1100,15 +1602,11 @@ const ChatPage = () => {
                      * Notification list ko locally read mark karo
                      */
                     setNotifications((prev) =>
-                        prev.map((notification) =>
-                            notificationIds.includes(
-                                notification.id
-                            )
-                                ? {
-                                    ...notification,
-                                    is_read: true,
-                                }
-                                : notification
+                        prev.filter(
+                            (notification) =>
+                                !notificationIds.includes(
+                                    notification.id
+                                )
                         )
                     );
 
@@ -1845,10 +2343,25 @@ const ChatPage = () => {
                             "========== CALL ACCEPTED =========="
                         );
 
+                        stopCallNotificationSound();
+
+                        const callStartedAt =
+                            Date.now();
+
+                        callStartTimeRef.current =
+                            callStartedAt;
+
+                        startCallTimer(
+                            callStartedAt
+                        );
+
                         setActiveCall(true);
+                        setOutgoingCall(null);
                         setCallStatus("connecting");
 
-                        await createCallerOffer();
+                        await createCallerOffer(
+                            callStartedAt
+                        );
 
                         return;
                     }
@@ -1878,24 +2391,7 @@ const ChatPage = () => {
                         console.log(data);
                         stopCallNotificationSound();
 
-                        if (localStreamRef.current) {
-                            localStreamRef.current
-                                .getTracks()
-                                .forEach((track) => {
-                                    track.stop();
-                                });
-
-                            localStreamRef.current = null;
-                        }
-
-                        if (peerConnectionRef.current) {
-                            peerConnectionRef.current.close();
-                            peerConnectionRef.current = null;
-                        }
-
-                        setActiveCall(false);
-                        setIncomingCall(null);
-                        setCallType(null);
+                        endCurrentCall(false);
 
                         return;
                     }
@@ -1988,12 +2484,10 @@ const ChatPage = () => {
 
                                 if (state === "connected") {
                                     console.log(
-                                        "CALL TIMER STARTING - RECEIVER"
+                                        "CALL CONNECTED - RECEIVER"
                                     );
 
                                     setCallStatus("connected");
-
-                                    startCallTimer(receiverCallStartedAt);
                                 }
 
                                 if (
@@ -2192,20 +2686,80 @@ const ChatPage = () => {
                            BROWSER NOTIFICATION
                         --------------------------------------------- */
 
-                        // Browser notification
+
 
                         if (
                             "Notification" in window &&
                             Notification.permission === "granted"
                         ) {
-                            new Notification(
+                            const browserNotification = new Notification(
                                 notification.title || "New message",
                                 {
                                     body:
-                                        notification.body ||
-                                        "You have a new message.",
+                                        notification.body
+                                            ? `${String(notification.body).slice(0, 15)}...`
+                                            : "You have a new message.",
                                 }
                             );
+
+                            browserNotification.onclick = async () => {
+                                window.focus();
+
+                                const conversationId =
+                                    getNotificationConversationId(
+                                        notification
+                                    );
+
+                                if (!conversationId) {
+                                    return;
+                                }
+
+                                try {
+                                    let conversation =
+                                        conversations.find(
+                                            (item) =>
+                                                String(item.id) ===
+                                                String(conversationId)
+                                        );
+
+                                    if (!conversation) {
+                                        const refreshed =
+                                            await fetchConversations();
+
+                                        conversation =
+                                            refreshed.find(
+                                                (item) =>
+                                                    String(item.id) ===
+                                                    String(conversationId)
+                                            );
+                                    }
+
+                                    if (conversation) {
+                                        setSelectedContact(
+                                            conversation
+                                        );
+
+                                        setConversations((prev) =>
+                                            prev.map((item) =>
+                                                String(item.id) ===
+                                                    String(conversationId)
+                                                    ? {
+                                                        ...item,
+                                                        unread_count: 0,
+                                                    }
+                                                    : item
+                                            )
+                                        );
+                                    }
+
+                                    browserNotification.close();
+                                } catch (error) {
+                                    console.error(
+                                        "Failed to open notification conversation:",
+                                        error
+                                    );
+                                }
+                            };
                         }
 
                         return;
@@ -3270,7 +3824,9 @@ const ChatPage = () => {
                     (
                         mimeType.startsWith("image/")
                             ? "image"
-                            : "file"
+                            : mimeType.startsWith("audio/")
+                                ? "audio"
+                                : "file"
                     );
 
                 console.log(
@@ -3525,308 +4081,506 @@ const ChatPage = () => {
     ======================================================== */
 
     return (
-        <div
-            className={`${styles.chatPage} ${darkMode ? styles.darkMode : ""
-                }`}
+        <ConfigProvider
+            theme={{
+                algorithm: darkMode
+                    ? theme.darkAlgorithm
+                    : theme.defaultAlgorithm,
+                token: {
+                    colorPrimary: "#00a884",
+                    colorLink: darkMode ? "#53bdeb" : "#027eb5",
+                    borderRadius: 8,
+                },
+            }}
         >
-
-            {/* =================================================
-                INCOMING MESSAGE TOAST NOTIFICATION
-            ================================================= */}
-            {incomingToast && (() => {
-                const toastSenderId =
-                    incomingToast?.data?.sender_id ||
-                    incomingToast?.data?.senderId ||
-                    incomingToast?.sender_id;
-                const toastSenderUser = toastSenderId
-                    ? usersMap[String(toastSenderId)]
-                    : null;
-                const toastAvatarUrl =
-                    toastSenderUser?.avatar_url ||
-                    incomingToast?.avatar_url ||
-                    null;
-                const toastSenderName =
-                    incomingToast?.title ||
-                    toastSenderUser?.username ||
-                    toastSenderUser?.name ||
-                    "New Message";
-                const toastInitial = toastSenderName.charAt(0).toUpperCase();
-
-                return (
-                    <div
-                        className={`${styles.incomingToast} ${incomingToast.isExiting ? styles.incomingToastExit : ""
-                            }`}
-                        onClick={handleToastClick}
-                        role="alert"
-                        aria-live="polite"
-                    >
-                        <div className={styles.toastAvatarWrapper}>
-                            {toastAvatarUrl ? (
-                                <Avatar
-                                    src={toastAvatarUrl}
-                                    size={38}
-                                    className={styles.toastAvatar}
-                                />
-                            ) : (
-                                <Avatar
-                                    size={38}
-                                    className={styles.toastAvatar}
-                                    style={{
-                                        backgroundColor: "#00a884",
-                                        color: "#ffffff",
-                                        fontWeight: 600,
-                                    }}
-                                >
-                                    {toastInitial || <UserOutlined />}
-                                </Avatar>
-                            )}
-                            <span className={styles.toastUnreadDot} />
-                        </div>
-
-                        <div className={styles.toastContent}>
-                            <div className={styles.toastHeader}>
-                                <span className={styles.toastSenderName}>
-                                    {toastSenderName}
-                                </span>
-                                <span className={styles.toastTime}>
-                                    {formatToastTime(incomingToast.created_at)}
-                                </span>
-                            </div>
-                            <p className={styles.toastMessagePreview}>
-                                {incomingToast.body || "You have a new message"}
-                            </p>
-                        </div>
-
-                        <button
-                            type="button"
-                            className={styles.toastCloseBtn}
-                            onClick={handleDismissToast}
-                            aria-label="Dismiss notification"
-                        >
-                            <CloseOutlined />
-                        </button>
-                    </div>
-                );
-            })()}
-
-            {/* =================================================
-                SIDEBAR
-            ================================================= */}
-
-            <aside
-                className={`${styles.sidebar} ${selectedContact ? styles.sidebarHiddenMobile : styles.sidebarActiveMobile
+            <div
+                className={`${styles.chatPage} ${darkMode ? styles.darkMode : ""
                     }`}
             >
 
-                <div className={styles.sidebarHeader}>
+                {/* =================================================
+                INCOMING MESSAGE TOAST NOTIFICATION
+            ================================================= */}
+                {incomingToast && (() => {
+                    const toastSenderId =
+                        incomingToast?.data?.sender_id ||
+                        incomingToast?.data?.senderId ||
+                        incomingToast?.sender_id;
+                    const toastSenderUser = toastSenderId
+                        ? usersMap[String(toastSenderId)]
+                        : null;
+                    const toastAvatarUrl =
+                        toastSenderUser?.avatar_url ||
+                        incomingToast?.avatar_url ||
+                        null;
+                    const toastSenderName =
+                        incomingToast?.title ||
+                        toastSenderUser?.username ||
+                        toastSenderUser?.name ||
+                        "New Message";
+                    const toastInitial = toastSenderName.charAt(0).toUpperCase();
 
-                    <div>
-                        <h2 className={styles.logo}>
-                            Realtime Chat
-                        </h2>
+                    return (
+                        <div
+                            className={`${styles.incomingToast} ${incomingToast.isExiting ? styles.incomingToastExit : ""
+                                }`}
+                            onClick={handleToastClick}
+                            role="alert"
+                            aria-live="polite"
+                        >
+                            <div className={styles.toastAvatarWrapper}>
+                                {toastAvatarUrl ? (
+                                    <Avatar
+                                        src={toastAvatarUrl}
+                                        size={38}
+                                        className={styles.toastAvatar}
+                                    />
+                                ) : (
+                                    <Avatar
+                                        size={38}
+                                        className={styles.toastAvatar}
+                                        style={{
+                                            backgroundColor: "#00a884",
+                                            color: "#ffffff",
+                                            fontWeight: 600,
+                                        }}
+                                    >
+                                        {toastInitial || <UserOutlined />}
+                                    </Avatar>
+                                )}
+                                <span className={styles.toastUnreadDot} />
+                            </div>
 
-                        <div className={styles.connectionStatus}>
-                            <span
-                                className={
-                                    connected
-                                        ? styles.onlineDot
-                                        : styles.offlineDot
-                                }
-                            />
+                            <div className={styles.toastContent}>
+                                <div className={styles.toastHeader}>
+                                    <span className={styles.toastSenderName}>
+                                        {toastSenderName}
+                                    </span>
+                                    <span className={styles.toastTime}>
+                                        {formatToastTime(incomingToast.created_at)}
+                                    </span>
+                                </div>
+                                <p className={styles.toastMessagePreview}>
+                                    {incomingToast.body || "You have a new message"}
+                                </p>
+                            </div>
 
-                            {connected
-                                ? "Connected"
-                                : "Disconnected"}
+                            <button
+                                type="button"
+                                className={styles.toastCloseBtn}
+                                onClick={handleDismissToast}
+                                aria-label="Dismiss notification"
+                            >
+                                <CloseOutlined />
+                            </button>
                         </div>
+                    );
+                })()}
+
+                {/* =================================================
+                SIDEBAR
+            ================================================= */}
+
+                <aside
+                    className={`${styles.sidebar} ${selectedContact ? styles.sidebarHiddenMobile : styles.sidebarActiveMobile
+                        }`}
+                >
+
+                    <div className={styles.sidebarHeader}>
+
+                        <div>
+                            <h2 className={styles.logo}>
+                                Realtime Chat
+                            </h2>
+
+                            <div className={styles.connectionStatus}>
+                                <span
+                                    className={
+                                        connected
+                                            ? styles.onlineDot
+                                            : styles.offlineDot
+                                    }
+                                />
+
+                                {connected
+                                    ? "Connected"
+                                    : "Disconnected"}
+                            </div>
+                        </div>
+
+                        <div
+                            style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "6px",
+                            }}
+                        >
+                            {/* DARK / LIGHT MODE */}
+                            <Button
+                                type="text"
+                                icon={
+                                    darkMode ? (
+                                        <SunOutlined />
+                                    ) : (
+                                        <MoonOutlined />
+                                    )
+                                }
+                                onClick={toggleTheme}
+                            >
+                                {darkMode ? "Light" : "Dark"}
+                            </Button>
+
+                        </div>
+
                     </div>
+
+                    {/* SEARCH */}
+
+                    <div
+                        className={
+                            styles.searchBox
+                        }
+                    >
+
+                        <Input
+                            prefix={
+                                <SearchOutlined />
+                            }
+                            placeholder="Search conversations..."
+                            value={search}
+                            onChange={(event) =>
+                                setSearch(
+                                    event.target.value
+                                )
+                            }
+                        />
+
+                    </div>
+
+
+                    {/* CONVERSATIONS HEADER */}
 
                     <div
                         style={{
                             display: "flex",
-                            alignItems: "center",
-                            gap: "6px",
+                            justifyContent:
+                                "space-between",
+                            alignItems:
+                                "center",
+                            padding:
+                                "10px 16px",
                         }}
                     >
-                        {/* DARK / LIGHT MODE */}
-                        <Button
-                            type="text"
-                            icon={
-                                darkMode ? (
-                                    <SunOutlined />
-                                ) : (
-                                    <MoonOutlined />
-                                )
+
+                        <div
+                            className={
+                                styles.contactsTitle
                             }
-                            onClick={toggleTheme}
                         >
-                            {darkMode ? "Light" : "Dark"}
+                            Conversations
+                        </div>
+
+
+                        <Button
+                            type="primary"
+                            size="small"
+                            icon={
+                                <PlusOutlined />
+                            }
+                            onClick={
+                                handleOpenNewChat
+                            }
+                        >
+                            New
                         </Button>
 
                     </div>
 
-                </div>
 
-                {/* SEARCH */}
-
-                <div
-                    className={
-                        styles.searchBox
-                    }
-                >
-
-                    <Input
-                        prefix={
-                            <SearchOutlined />
-                        }
-                        placeholder="Search conversations..."
-                        value={search}
-                        onChange={(event) =>
-                            setSearch(
-                                event.target.value
-                            )
-                        }
-                    />
-
-                </div>
-
-
-                {/* CONVERSATIONS HEADER */}
-
-                <div
-                    style={{
-                        display: "flex",
-                        justifyContent:
-                            "space-between",
-                        alignItems:
-                            "center",
-                        padding:
-                            "10px 16px",
-                    }}
-                >
+                    {/* CONVERSATIONS */}
 
                     <div
                         className={
-                            styles.contactsTitle
+                            styles.contactsList
                         }
                     >
-                        Conversations
+
+                        {loadingConversations ? (
+
+                            <div
+                                style={{
+                                    textAlign:
+                                        "center",
+                                    padding:
+                                        "20px",
+                                }}
+                            >
+                                <Spin />
+                            </div>
+
+                        ) : filteredContacts.length ===
+                            0 ? (
+
+                            <div
+                                style={{
+                                    textAlign:
+                                        "center",
+                                    padding:
+                                        "10px",
+                                    color:
+                                        "#888",
+                                }}
+                            >
+                                No conversations
+                                found
+                            </div>
+
+                        ) : (
+
+                            filteredContacts.map(
+                                (contact) => (
+
+                                    <button
+                                        key={
+                                            contact.id
+                                        }
+                                        className={`${styles.contactItem} ${String(
+                                            selectedContact?.id
+                                        ) ===
+                                            String(
+                                                contact.id
+                                            )
+                                            ? styles.selectedContact
+                                            : ""
+                                            }`}
+                                        onClick={() => {
+
+                                            setSelectedContact(
+                                                contact
+                                            );
+
+
+                                            setConversations(
+                                                (prev) =>
+                                                    prev.map(
+                                                        (
+                                                            item
+                                                        ) =>
+                                                            String(
+                                                                item.id
+                                                            ) ===
+                                                                String(
+                                                                    contact.id
+                                                                )
+                                                                ? {
+                                                                    ...item,
+                                                                    unread_count:
+                                                                        0,
+                                                                }
+                                                                : item
+                                                    )
+                                            );
+
+
+                                            if (
+                                                websocketRef.current &&
+                                                websocketRef.current
+                                                    .readyState ===
+                                                WebSocket.OPEN
+                                            ) {
+                                                sendConversationRead(
+                                                    websocketRef.current,
+                                                    contact.id
+                                                );
+                                            }
+
+                                        }}
+                                    >
+
+                                        <div
+                                            className={
+                                                styles.avatarWrapper
+                                            }
+                                        >
+                                            <Avatar
+                                                size={52}
+                                                src={
+                                                    contact?.other_user?.profile_picture
+                                                        ? normalizeFileUrl(
+                                                            contact.other_user.profile_picture
+                                                        )
+                                                        : undefined
+                                                }
+                                                icon={<UserOutlined />}
+                                            />
+                                        </div>
+
+
+                                        <div
+                                            className={
+                                                styles.contactInfo
+                                            }
+                                        >
+
+                                            <div
+                                                style={{
+                                                    display:
+                                                        "flex",
+                                                    alignItems:
+                                                        "center",
+                                                    justifyContent:
+                                                        "space-between",
+                                                    gap:
+                                                        "8px",
+                                                }}
+                                            >
+
+                                                <div
+                                                    className={
+                                                        styles.contactName
+                                                    }
+                                                >
+                                                    {
+                                                        getConversationTitle(
+                                                            contact,
+                                                            conversationPartnerMap[
+                                                            String(contact.id)
+                                                            ]
+                                                        )
+                                                    }
+                                                </div>
+
+
+                                                {contact.unread_count >
+                                                    0 && (
+
+                                                        <span
+                                                            style={{
+                                                                minWidth:
+                                                                    "22px",
+                                                                height:
+                                                                    "22px",
+                                                                padding:
+                                                                    "0 6px",
+                                                                borderRadius:
+                                                                    "11px",
+                                                                background:
+                                                                    "#25d366",
+                                                                color:
+                                                                    "#fff",
+                                                                fontSize:
+                                                                    "12px",
+                                                                fontWeight:
+                                                                    600,
+                                                                display:
+                                                                    "inline-flex",
+                                                                alignItems:
+                                                                    "center",
+                                                                justifyContent:
+                                                                    "center",
+                                                            }}
+                                                        >
+                                                            {contact.unread_count >
+                                                                99
+                                                                ? "99+"
+                                                                : contact.unread_count}
+                                                        </span>
+
+                                                    )}
+
+                                            </div>
+
+
+                                            <Text
+                                                type="secondary"
+                                                className={
+                                                    styles.contactEmail
+                                                }
+                                            >
+                                                {contact.created_at
+                                                    ? new Date(
+                                                        contact.created_at
+                                                    ).toLocaleDateString()
+                                                    : ""}
+                                            </Text>
+
+                                        </div>
+
+                                    </button>
+
+                                )
+                            )
+
+                        )}
+
                     </div>
 
+                    {/* =================================================
+    PROFILE BUTTON
+================================================= */}
 
-                    <Button
-                        type="primary"
-                        size="small"
-                        icon={
-                            <PlusOutlined />
-                        }
-                        onClick={
-                            handleOpenNewChat
+                    <div
+                        className={
+                            styles.profileFooter
                         }
                     >
-                        New
-                    </Button>
 
-                </div>
+                        <Button
+                            type="text"
+                            className={
+                                styles.profileButton
+                            }
+                            icon={
+                                <UserOutlined />
+                            }
+                            onClick={() =>
+                                navigate("/profile")
+                            }
+                        >
+                            Profile
+                        </Button>
+
+                    </div>
+
+                </aside>
 
 
-                {/* CONVERSATIONS */}
+                {/* =================================================
+                CHAT AREA
+            ================================================= */}
 
-                <div
-                    className={
-                        styles.contactsList
-                    }
+                <main
+                    className={`${styles.chatArea} ${!selectedContact ? styles.chatAreaHiddenMobile : styles.chatAreaActiveMobile
+                        }`}
                 >
 
-                    {loadingConversations ? (
+                    {selectedContact ? (
 
-                        <div
-                            style={{
-                                textAlign:
-                                    "center",
-                                padding:
-                                    "20px",
-                            }}
-                        >
-                            <Spin />
-                        </div>
+                        <>
 
-                    ) : filteredContacts.length ===
-                        0 ? (
+                            {/* CHAT HEADER */}
 
-                        <div
-                            style={{
-                                textAlign:
-                                    "center",
-                                padding:
-                                    "10px",
-                                color:
-                                    "#888",
-                            }}
-                        >
-                            No conversations
-                            found
-                        </div>
+                            <header
+                                className={
+                                    styles.chatHeader
+                                }
+                                style={{
+                                    position:
+                                        "relative",
+                                }}
+                            >
 
-                    ) : (
+                                <Button
+                                    type="text"
+                                    icon={<ArrowLeftOutlined />}
+                                    className={styles.mobileBackButton}
+                                    onClick={() => setSelectedContact(null)}
+                                />
 
-                        filteredContacts.map(
-                            (contact) => (
-
-                                <button
-                                    key={
-                                        contact.id
+                                <div
+                                    className={
+                                        styles.chatUserWrapper
                                     }
-                                    className={`${styles.contactItem} ${String(
-                                        selectedContact?.id
-                                    ) ===
-                                        String(
-                                            contact.id
-                                        )
-                                        ? styles.selectedContact
-                                        : ""
-                                        }`}
-                                    onClick={() => {
-
-                                        setSelectedContact(
-                                            contact
-                                        );
-
-
-                                        setConversations(
-                                            (prev) =>
-                                                prev.map(
-                                                    (
-                                                        item
-                                                    ) =>
-                                                        String(
-                                                            item.id
-                                                        ) ===
-                                                            String(
-                                                                contact.id
-                                                            )
-                                                            ? {
-                                                                ...item,
-                                                                unread_count:
-                                                                    0,
-                                                            }
-                                                            : item
-                                                )
-                                        );
-
-
-                                        if (
-                                            websocketRef.current &&
-                                            websocketRef.current
-                                                .readyState ===
-                                            WebSocket.OPEN
-                                        ) {
-                                            sendConversationRead(
-                                                websocketRef.current,
-                                                contact.id
-                                            );
-                                        }
-
-                                    }}
                                 >
 
                                     <div
@@ -3835,646 +4589,386 @@ const ChatPage = () => {
                                         }
                                     >
                                         <Avatar
-                                            size={52}
-                                            src={
-                                                contact?.other_user?.profile_picture
-                                                    ? normalizeFileUrl(
-                                                        contact.other_user.profile_picture
-                                                    )
-                                                    : undefined
+                                            key={
+                                                selectedContact?.other_user?.profile_picture ||
+                                                selectedContact?.partner_user?.profile_picture ||
+                                                "default-avatar"
                                             }
-                                            icon={<UserOutlined />}
+                                            size={48}
+                                            src={
+                                                selectedContact?.other_user?.profile_picture
+                                                    ? normalizeFileUrl(
+                                                        selectedContact.other_user.profile_picture
+                                                    )
+                                                    : selectedContact?.partner_user?.profile_picture
+                                                        ? normalizeFileUrl(
+                                                            selectedContact.partner_user.profile_picture
+                                                        )
+                                                        : undefined
+                                            }
+                                            icon={
+                                                <UserOutlined />
+                                            }
                                         />
                                     </div>
 
 
-                                    <div
-                                        className={
-                                            styles.contactInfo
+                                    <div>
+
+                                        <h3
+                                            className={
+                                                styles.chatUserName
+                                            }
+                                        >
+                                            {
+                                                getConversationTitle(
+                                                    selectedContact,
+                                                    conversationPartnerMap[
+                                                    String(selectedContact.id)
+                                                    ]
+                                                )
+                                            }
+                                        </h3>
+
+
+                                        <Text
+                                            type="secondary"
+                                        >
+                                            {isPartnerTyping ? (
+
+                                                <span
+                                                    style={{
+                                                        color:
+                                                            "#00a884",
+                                                        fontWeight:
+                                                            "bold",
+                                                    }}
+                                                >
+                                                    typing...
+                                                </span>
+
+                                            ) : selectedContact.is_group ? (
+
+                                                "Group Chat"
+
+                                            ) : (
+
+                                                "Direct Message"
+
+                                            )}
+                                        </Text>
+
+                                    </div>
+
+                                </div>
+
+
+                                <Button
+                                    type="text"
+                                    icon={<PhoneOutlined />}
+                                    aria-label="Audio call"
+                                    onClick={() => {
+                                        const targetUserId =
+                                            selectedContact?.other_user?.id;
+
+                                        if (!targetUserId) {
+                                            antMessage.error(
+                                                "User information is missing."
+                                            );
+
+                                            return;
                                         }
+
+                                        startOutgoingCall(
+                                            targetUserId,
+                                            selectedContact.id,
+                                            "audio"
+                                        );
+                                    }}
+                                />
+
+                                <Button
+                                    type="text"
+                                    icon={<VideoCameraOutlined />}
+                                    aria-label="Video call"
+                                    onClick={() => {
+                                        const targetUserId =
+                                            selectedContact?.other_user?.id;
+
+                                        if (!targetUserId) {
+                                            antMessage.error(
+                                                "User information is missing."
+                                            );
+
+                                            return;
+                                        }
+
+                                        startOutgoingCall(
+                                            targetUserId,
+                                            selectedContact.id,
+                                            "video"
+                                        );
+                                    }}
+                                />
+
+
+                                {/* NOTIFICATION BUTTON */}
+
+                                <div
+                                    style={{
+                                        marginLeft: "auto",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "4px",
+                                    }}
+                                >
+                                    {/* NOTIFICATION */}
+
+                                    <div
+                                        style={{
+                                            position: "relative",
+                                        }}
+                                    >
+                                        <Button
+                                            type="text"
+                                            icon={<BellOutlined />}
+                                            onClick={() =>
+                                                setNotificationOpen(
+                                                    (prev) => !prev
+                                                )
+                                            }
+                                        />
+
+                                        {notificationCount > 0 && (
+                                            <span
+                                                style={{
+                                                    position: "absolute",
+                                                    top: "0",
+                                                    right: "0",
+                                                    minWidth: "18px",
+                                                    height: "18px",
+                                                    borderRadius: "9px",
+                                                    background: "#ff4d4f",
+                                                    color: "#fff",
+                                                    fontSize: "10px",
+                                                    fontWeight: 700,
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    justifyContent: "center",
+                                                    padding: "0 4px",
+                                                }}
+                                            >
+                                                {notificationCount > 99
+                                                    ? "99+"
+                                                    : notificationCount}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {/* THREE DOTS MENU */}
+
+                                    <Dropdown
+                                        trigger={["click"]}
+                                        placement="bottomRight"
+                                        menu={{
+                                            items: [
+                                                {
+                                                    key: "clear-chat",
+                                                    label: (
+                                                        <span
+                                                            style={{
+                                                                color: "#ff4d4f",
+                                                            }}
+                                                        >
+                                                            Clear chat
+                                                        </span>
+                                                    ),
+                                                },
+                                            ],
+
+                                            onClick: ({ key }) => {
+                                                if (key === "clear-chat") {
+                                                    handleClearChat();
+                                                }
+                                            },
+                                        }}
+                                    >
+                                        <Button
+                                            type="text"
+                                            icon={<MoreOutlined />}
+                                            aria-label="Chat options"
+                                        />
+                                    </Dropdown>
+                                </div>
+
+
+                                {/* NOTIFICATION PANEL */}
+
+                                {notificationOpen && (
+
+                                    <div
+                                        className={styles.notificationPopup}
                                     >
 
                                         <div
                                             style={{
                                                 display:
                                                     "flex",
-                                                alignItems:
-                                                    "center",
                                                 justifyContent:
                                                     "space-between",
-                                                gap:
+                                                alignItems:
+                                                    "center",
+                                                marginBottom:
                                                     "8px",
+                                                padding:
+                                                    "4px",
                                             }}
                                         >
 
-                                            <div
-                                                className={
-                                                    styles.contactName
-                                                }
-                                            >
-                                                {
-                                                    getConversationTitle(
-                                                        contact,
-                                                        conversationPartnerMap[
-                                                        String(contact.id)
-                                                        ]
-                                                    )
-                                                }
-                                            </div>
+                                            <strong>
+                                                Notifications
+                                            </strong>
 
 
-                                            {contact.unread_count >
+                                            {notificationCount >
                                                 0 && (
 
-                                                    <span
-                                                        style={{
-                                                            minWidth:
-                                                                "22px",
-                                                            height:
-                                                                "22px",
-                                                            padding:
-                                                                "0 6px",
-                                                            borderRadius:
-                                                                "11px",
-                                                            background:
-                                                                "#25d366",
-                                                            color:
-                                                                "#fff",
-                                                            fontSize:
-                                                                "12px",
-                                                            fontWeight:
-                                                                600,
-                                                            display:
-                                                                "inline-flex",
-                                                            alignItems:
-                                                                "center",
-                                                            justifyContent:
-                                                                "center",
+                                                    <Button
+                                                        type="link"
+                                                        size="small"
+                                                        onClick={async () => {
+                                                            try {
+                                                                const {
+                                                                    markAllNotificationsAsRead,
+                                                                } =
+                                                                    await import(
+                                                                        "../../../api/notification.api"
+                                                                    );
+
+                                                                await markAllNotificationsAsRead();
+
+                                                                setNotifications([]);
+
+                                                                setNotificationCount(
+                                                                    0
+                                                                );
+                                                            } catch (
+                                                            error
+                                                            ) {
+                                                                console.error(
+                                                                    "Failed to mark notifications:",
+                                                                    error
+                                                                );
+                                                            }
                                                         }}
                                                     >
-                                                        {contact.unread_count >
-                                                            99
-                                                            ? "99+"
-                                                            : contact.unread_count}
-                                                    </span>
+                                                        Mark all read
+                                                    </Button>
 
                                                 )}
 
                                         </div>
 
 
-                                        <Text
-                                            type="secondary"
-                                            className={
-                                                styles.contactEmail
-                                            }
-                                        >
-                                            {contact.created_at
-                                                ? new Date(
-                                                    contact.created_at
-                                                ).toLocaleDateString()
-                                                : ""}
-                                        </Text>
+                                        {notifications.length ===
+                                            0 ? (
 
-                                    </div>
-
-                                </button>
-
-                            )
-                        )
-
-                    )}
-
-                </div>
-
-                {/* =================================================
-    PROFILE BUTTON
-================================================= */}
-
-                <div
-                    className={
-                        styles.profileFooter
-                    }
-                >
-
-                    <Button
-                        type="text"
-                        className={
-                            styles.profileButton
-                        }
-                        icon={
-                            <UserOutlined />
-                        }
-                        onClick={() =>
-                            navigate("/profile")
-                        }
-                    >
-                        Profile
-                    </Button>
-
-                </div>
-
-            </aside>
-
-
-            {/* =================================================
-                CHAT AREA
-            ================================================= */}
-
-            <main
-                className={`${styles.chatArea} ${!selectedContact ? styles.chatAreaHiddenMobile : styles.chatAreaActiveMobile
-                    }`}
-            >
-
-                {selectedContact ? (
-
-                    <>
-
-                        {/* CHAT HEADER */}
-
-                        <header
-                            className={
-                                styles.chatHeader
-                            }
-                            style={{
-                                position:
-                                    "relative",
-                            }}
-                        >
-
-                            <Button
-                                type="text"
-                                icon={<ArrowLeftOutlined />}
-                                className={styles.mobileBackButton}
-                                onClick={() => setSelectedContact(null)}
-                            />
-
-                            <div
-                                className={
-                                    styles.chatUserWrapper
-                                }
-                            >
-
-                                <div
-                                    className={
-                                        styles.avatarWrapper
-                                    }
-                                >
-                                    <Avatar
-                                        key={
-                                            selectedContact?.other_user?.profile_picture ||
-                                            selectedContact?.partner_user?.profile_picture ||
-                                            "default-avatar"
-                                        }
-                                        size={48}
-                                        src={
-                                            selectedContact?.other_user?.profile_picture
-                                                ? normalizeFileUrl(
-                                                    selectedContact.other_user.profile_picture
-                                                )
-                                                : selectedContact?.partner_user?.profile_picture
-                                                    ? normalizeFileUrl(
-                                                        selectedContact.partner_user.profile_picture
-                                                    )
-                                                    : undefined
-                                        }
-                                        icon={
-                                            <UserOutlined />
-                                        }
-                                    />
-                                </div>
-
-
-                                <div>
-
-                                    <h3
-                                        className={
-                                            styles.chatUserName
-                                        }
-                                    >
-                                        {
-                                            getConversationTitle(
-                                                selectedContact,
-                                                conversationPartnerMap[
-                                                String(selectedContact.id)
-                                                ]
-                                            )
-                                        }
-                                    </h3>
-
-
-                                    <Text
-                                        type="secondary"
-                                    >
-                                        {isPartnerTyping ? (
-
-                                            <span
+                                            <div
                                                 style={{
-                                                    color:
-                                                        "#00a884",
-                                                    fontWeight:
-                                                        "bold",
+                                                    textAlign:
+                                                        "center",
+                                                    padding:
+                                                        "30px 10px",
+                                                    color: darkMode
+                                                        ? "#8696a0"
+                                                        : "#888",
                                                 }}
                                             >
-                                                typing...
-                                            </span>
-
-                                        ) : selectedContact.is_group ? (
-
-                                            "Group Chat"
+                                                No notifications
+                                            </div>
 
                                         ) : (
 
-                                            "Direct Message"
+                                            notifications.map(
+                                                (
+                                                    notification
+                                                ) => (
 
-                                        )}
-                                    </Text>
-
-                                </div>
-
-                            </div>
-
-
-                            <Button
-                                type="text"
-                                icon={<PhoneOutlined />}
-                                aria-label="Audio call"
-                                onClick={() => {
-                                    const targetUserId =
-                                        selectedContact?.other_user?.id;
-
-                                    if (!targetUserId) {
-                                        antMessage.error(
-                                            "User information is missing."
-                                        );
-
-                                        return;
-                                    }
-
-                                    startOutgoingCall(
-                                        targetUserId,
-                                        selectedContact.id,
-                                        "audio"
-                                    );
-                                }}
-                            />
-
-                            <Button
-                                type="text"
-                                icon={<VideoCameraOutlined />}
-                                aria-label="Video call"
-                                onClick={() => {
-                                    const targetUserId =
-                                        selectedContact?.other_user?.id;
-
-                                    if (!targetUserId) {
-                                        antMessage.error(
-                                            "User information is missing."
-                                        );
-
-                                        return;
-                                    }
-
-                                    startOutgoingCall(
-                                        targetUserId,
-                                        selectedContact.id,
-                                        "video"
-                                    );
-                                }}
-                            />
-
-
-                            {/* NOTIFICATION BUTTON */}
-
-                            <div
-                                style={{
-                                    marginLeft: "auto",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: "4px",
-                                }}
-                            >
-                                {/* NOTIFICATION */}
-
-                                <div
-                                    style={{
-                                        position: "relative",
-                                    }}
-                                >
-                                    <Button
-                                        type="text"
-                                        icon={<BellOutlined />}
-                                        onClick={() =>
-                                            setNotificationOpen(
-                                                (prev) => !prev
-                                            )
-                                        }
-                                    />
-
-                                    {notificationCount > 0 && (
-                                        <span
-                                            style={{
-                                                position: "absolute",
-                                                top: "0",
-                                                right: "0",
-                                                minWidth: "18px",
-                                                height: "18px",
-                                                borderRadius: "9px",
-                                                background: "#ff4d4f",
-                                                color: "#fff",
-                                                fontSize: "10px",
-                                                fontWeight: 700,
-                                                display: "flex",
-                                                alignItems: "center",
-                                                justifyContent: "center",
-                                                padding: "0 4px",
-                                            }}
-                                        >
-                                            {notificationCount > 99
-                                                ? "99+"
-                                                : notificationCount}
-                                        </span>
-                                    )}
-                                </div>
-
-                                {/* THREE DOTS MENU */}
-
-                                <Dropdown
-                                    trigger={["click"]}
-                                    placement="bottomRight"
-                                    menu={{
-                                        items: [
-                                            {
-                                                key: "clear-chat",
-                                                label: (
-                                                    <span
-                                                        style={{
-                                                            color: "#ff4d4f",
-                                                        }}
-                                                    >
-                                                        Clear chat
-                                                    </span>
-                                                ),
-                                            },
-                                        ],
-
-                                        onClick: ({ key }) => {
-                                            if (key === "clear-chat") {
-                                                handleClearChat();
-                                            }
-                                        },
-                                    }}
-                                >
-                                    <Button
-                                        type="text"
-                                        icon={<MoreOutlined />}
-                                        aria-label="Chat options"
-                                    />
-                                </Dropdown>
-                            </div>
-
-
-                            {/* NOTIFICATION PANEL */}
-
-                            {notificationOpen && (
-
-                                <div
-                                    className={styles.notificationPopup}
-                                    style={{
-                                        position:
-                                            "absolute",
-                                        top:
-                                            "60px",
-                                        right:
-                                            "20px",
-                                        width:
-                                            "340px",
-                                        maxHeight:
-                                            "420px",
-                                        overflowY:
-                                            "auto",
-                                        background:
-                                            "#fff",
-                                        borderRadius:
-                                            "10px",
-                                        boxShadow:
-                                            "0 8px 30px rgba(0,0,0,0.15)",
-                                        zIndex:
-                                            1000,
-                                        padding:
-                                            "10px",
-                                    }}
-                                >
-
-                                    <div
-                                        style={{
-                                            display:
-                                                "flex",
-                                            justifyContent:
-                                                "space-between",
-                                            alignItems:
-                                                "center",
-                                            marginBottom:
-                                                "8px",
-                                            padding:
-                                                "4px",
-                                        }}
-                                    >
-
-                                        <strong>
-                                            Notifications
-                                        </strong>
-
-
-                                        {notificationCount >
-                                            0 && (
-
-                                                <Button
-                                                    type="link"
-                                                    size="small"
-                                                    onClick={async () => {
-                                                        try {
-                                                            const {
-                                                                markAllNotificationsAsRead,
-                                                            } =
-                                                                await import(
-                                                                    "../../../api/notification.api"
-                                                                );
-
-                                                            await markAllNotificationsAsRead();
-
-                                                            setNotifications(
-                                                                (
-                                                                    prev
-                                                                ) =>
-                                                                    prev.map(
-                                                                        (
-                                                                            item
-                                                                        ) => ({
-                                                                            ...item,
-                                                                            is_read:
-                                                                                true,
-                                                                        })
-                                                                    )
-                                                            );
-
-                                                            setNotificationCount(
-                                                                0
-                                                            );
-                                                        } catch (
-                                                        error
-                                                        ) {
-                                                            console.error(
-                                                                "Failed to mark notifications:",
-                                                                error
-                                                            );
+                                                    <div
+                                                        key={
+                                                            notification.id
                                                         }
-                                                    }}
-                                                >
-                                                    Mark all read
-                                                </Button>
+                                                        onClick={async () => {
 
-                                            )}
+                                                            /* --------------------------------
+                                                               MARK NOTIFICATION READ
+                                                            -------------------------------- */
 
-                                    </div>
+                                                            if (
+                                                                !notification.is_read
+                                                            ) {
+                                                                try {
+                                                                    const {
+                                                                        markNotificationAsRead,
+                                                                    } =
+                                                                        await import(
+                                                                            "../../../api/notification.api"
+                                                                        );
 
-
-                                    {notifications.length ===
-                                        0 ? (
-
-                                        <div
-                                            style={{
-                                                textAlign:
-                                                    "center",
-                                                padding:
-                                                    "30px 10px",
-                                                color:
-                                                    "#888",
-                                            }}
-                                        >
-                                            No notifications
-                                        </div>
-
-                                    ) : (
-
-                                        notifications.map(
-                                            (
-                                                notification
-                                            ) => (
-
-                                                <div
-                                                    key={
-                                                        notification.id
-                                                    }
-                                                    onClick={async () => {
-
-                                                        /* --------------------------------
-                                                           MARK NOTIFICATION READ
-                                                        -------------------------------- */
-
-                                                        if (
-                                                            !notification.is_read
-                                                        ) {
-                                                            try {
-                                                                const {
-                                                                    markNotificationAsRead,
-                                                                } =
-                                                                    await import(
-                                                                        "../../../api/notification.api"
+                                                                    await markNotificationAsRead(
+                                                                        notification.id
                                                                     );
 
-                                                                await markNotificationAsRead(
-                                                                    notification.id
-                                                                );
-
-                                                                setNotifications(
-                                                                    (
-                                                                        prev
-                                                                    ) =>
-                                                                        prev.map(
-                                                                            (
-                                                                                item
-                                                                            ) =>
-                                                                                item.id ===
-                                                                                    notification.id
-                                                                                    ? {
-                                                                                        ...item,
-                                                                                        is_read:
-                                                                                            true,
-                                                                                    }
-                                                                                    : item
+                                                                    setNotifications((prev) =>
+                                                                        prev.filter(
+                                                                            (item) =>
+                                                                                item.id !== notification.id
                                                                         )
-                                                                );
+                                                                    );
 
-                                                                setNotificationCount(
-                                                                    (
-                                                                        prev
-                                                                    ) =>
-                                                                        Math.max(
-                                                                            0,
-                                                                            prev -
-                                                                            1
-                                                                        )
-                                                                );
-                                                            } catch (
-                                                            error
-                                                            ) {
-                                                                console.error(
-                                                                    "Failed to mark notification:",
-                                                                    error
-                                                                );
-                                                            }
-                                                        }
-
-
-                                                        /* --------------------------------
-                                                           OPEN RELATED CONVERSATION
-                                                        -------------------------------- */
-
-                                                        const conversationId =
-                                                            getNotificationConversationId(
-                                                                notification
-                                                            );
-
-
-                                                        if (
-                                                            conversationId
-                                                        ) {
-                                                            try {
-
-                                                                /*
-                                                                 * Pehle current sidebar
-                                                                 * list mein search karo.
-                                                                 */
-
-                                                                let conversation =
-                                                                    conversations.find(
+                                                                    setNotificationCount(
                                                                         (
-                                                                            item
+                                                                            prev
                                                                         ) =>
-                                                                            String(
-                                                                                item.id
-                                                                            ) ===
-                                                                            String(
-                                                                                conversationId
+                                                                            Math.max(
+                                                                                0,
+                                                                                prev -
+                                                                                1
                                                                             )
                                                                     );
-
-
-                                                                /*
-                                                                 * Agar sidebar mein nahi
-                                                                 * hai to backend se fresh
-                                                                 * list lao.
-                                                                 */
-
-                                                                if (
-                                                                    !conversation
+                                                                } catch (
+                                                                error
                                                                 ) {
-                                                                    const refreshed =
-                                                                        await fetchConversations();
+                                                                    console.error(
+                                                                        "Failed to mark notification:",
+                                                                        error
+                                                                    );
+                                                                }
+                                                            }
 
-                                                                    conversation =
-                                                                        refreshed.find(
+
+                                                            /* --------------------------------
+                                                               OPEN RELATED CONVERSATION
+                                                            -------------------------------- */
+
+                                                            const conversationId =
+                                                                getNotificationConversationId(
+                                                                    notification
+                                                                );
+
+
+                                                            if (
+                                                                conversationId
+                                                            ) {
+                                                                try {
+
+                                                                    /*
+                                                                     * Pehle current sidebar
+                                                                     * list mein search karo.
+                                                                     */
+
+                                                                    let conversation =
+                                                                        conversations.find(
                                                                             (
                                                                                 item
                                                                             ) =>
@@ -4485,296 +4979,402 @@ const ChatPage = () => {
                                                                                     conversationId
                                                                                 )
                                                                         );
-                                                                }
 
 
-                                                                if (
-                                                                    conversation
-                                                                ) {
-                                                                    setSelectedContact(
-                                                                        conversation
-                                                                    );
+                                                                    /*
+                                                                     * Agar sidebar mein nahi
+                                                                     * hai to backend se fresh
+                                                                     * list lao.
+                                                                     */
 
-                                                                    setConversations(
-                                                                        (
-                                                                            prev
-                                                                        ) =>
-                                                                            prev.map(
+                                                                    if (
+                                                                        !conversation
+                                                                    ) {
+                                                                        const refreshed =
+                                                                            await fetchConversations();
+
+                                                                        conversation =
+                                                                            refreshed.find(
                                                                                 (
                                                                                     item
                                                                                 ) =>
                                                                                     String(
                                                                                         item.id
                                                                                     ) ===
+                                                                                    String(
+                                                                                        conversationId
+                                                                                    )
+                                                                            );
+                                                                    }
+
+
+                                                                    if (
+                                                                        conversation
+                                                                    ) {
+                                                                        setSelectedContact(
+                                                                            conversation
+                                                                        );
+
+                                                                        setConversations(
+                                                                            (
+                                                                                prev
+                                                                            ) =>
+                                                                                prev.map(
+                                                                                    (
+                                                                                        item
+                                                                                    ) =>
                                                                                         String(
-                                                                                            conversationId
-                                                                                        )
-                                                                                        ? {
-                                                                                            ...item,
-                                                                                            unread_count:
-                                                                                                0,
-                                                                                        }
-                                                                                        : item
-                                                                            )
+                                                                                            item.id
+                                                                                        ) ===
+                                                                                            String(
+                                                                                                conversationId
+                                                                                            )
+                                                                                            ? {
+                                                                                                ...item,
+                                                                                                unread_count:
+                                                                                                    0,
+                                                                                            }
+                                                                                            : item
+                                                                                )
+                                                                        );
+                                                                    }
+
+                                                                } catch (
+                                                                error
+                                                                ) {
+                                                                    console.error(
+                                                                        "Failed to open notification conversation:",
+                                                                        error
                                                                     );
                                                                 }
-
-                                                            } catch (
-                                                            error
-                                                            ) {
-                                                                console.error(
-                                                                    "Failed to open notification conversation:",
-                                                                    error
-                                                                );
                                                             }
-                                                        }
 
 
-                                                        setNotificationOpen(
-                                                            false
-                                                        );
+                                                            setNotificationOpen(
+                                                                false
+                                                            );
 
-                                                    }}
-                                                    style={{
-                                                        padding:
-                                                            "10px",
-                                                        borderRadius:
-                                                            "8px",
-                                                        cursor:
-                                                            "pointer",
-                                                        background:
-                                                            notification.is_read
-                                                                ? "transparent"
-                                                                : darkMode
-                                                                    ? "#202c33"
-                                                                    : "#e7fce3",
-                                                        marginBottom:
-                                                            "4px",
-                                                    }}
-                                                >
-
-                                                    <div
+                                                        }}
                                                         style={{
-                                                            fontWeight:
+                                                            padding:
+                                                                "10px",
+                                                            borderRadius:
+                                                                "8px",
+                                                            cursor:
+                                                                "pointer",
+                                                            background:
                                                                 notification.is_read
-                                                                    ? 400
-                                                                    : 600,
+                                                                    ? "transparent"
+                                                                    : darkMode
+                                                                        ? "#202c33"
+                                                                        : "#e7fce3",
+                                                            marginBottom:
+                                                                "4px",
                                                         }}
                                                     >
-                                                        {
-                                                            notification.title
-                                                        }
+
+                                                        <div
+                                                            style={{
+                                                                fontWeight:
+                                                                    notification.is_read
+                                                                        ? 400
+                                                                        : 600,
+                                                                color: darkMode
+                                                                    ? "#e9edef"
+                                                                    : "#111b21",
+                                                            }}
+                                                        >
+                                                            {
+                                                                notification.title
+                                                            }
+                                                        </div>
+
+
+                                                        <div
+                                                            style={{
+                                                                fontSize:
+                                                                    "13px",
+                                                                color: darkMode
+                                                                    ? "#aebac1"
+                                                                    : "#667781",
+                                                                marginTop:
+                                                                    "3px",
+                                                            }}
+                                                        >
+                                                            {
+                                                                notification.body
+                                                            }
+                                                        </div>
+
+
+                                                        <div
+                                                            style={{
+                                                                fontSize:
+                                                                    "11px",
+                                                                color: darkMode
+                                                                    ? "#8696a0"
+                                                                    : "#8696a0",
+                                                                marginTop:
+                                                                    "5px",
+                                                            }}
+                                                        >
+                                                            {notification.created_at
+                                                                ? new Date(
+                                                                    notification.created_at
+                                                                ).toLocaleString()
+                                                                : ""}
+                                                        </div>
+
                                                     </div>
 
-
-                                                    <div
-                                                        style={{
-                                                            fontSize:
-                                                                "13px",
-                                                            color:
-                                                                "#666",
-                                                            marginTop:
-                                                                "3px",
-                                                        }}
-                                                    >
-                                                        {
-                                                            notification.body
-                                                        }
-                                                    </div>
-
-
-                                                    <div
-                                                        style={{
-                                                            fontSize:
-                                                                "11px",
-                                                            color:
-                                                                "#999",
-                                                            marginTop:
-                                                                "5px",
-                                                        }}
-                                                    >
-                                                        {notification.created_at
-                                                            ? new Date(
-                                                                notification.created_at
-                                                            ).toLocaleString()
-                                                            : ""}
-                                                    </div>
-
-                                                </div>
-
+                                                )
                                             )
-                                        )
 
-                                    )}
+                                        )}
 
-                                </div>
+                                    </div>
 
-                            )}
+                                )}
 
-                        </header>
+                            </header>
 
 
-                        {/* =================================================
+                            {/* =================================================
                             MESSAGES
                         ================================================= */}
 
-                        <section
-                            className={
-                                styles.messagesArea
-                            }
-                        >
+                            <section
+                                className={
+                                    styles.messagesArea
+                                }
+                            >
 
-                            {loadingMessages ? (
+                                {loadingMessages ? (
 
-                                <div
-                                    style={{
-                                        textAlign:
-                                            "center",
-                                        padding:
-                                            "30px",
-                                    }}
-                                >
-                                    <Spin size="large" />
-                                </div>
+                                    <div
+                                        style={{
+                                            textAlign:
+                                                "center",
+                                            padding:
+                                                "30px",
+                                        }}
+                                    >
+                                        <Spin size="large" />
+                                    </div>
 
-                            ) : messages.length ===
-                                0 ? (
+                                ) : messages.length ===
+                                    0 ? (
 
-                                <div
-                                    style={{
-                                        textAlign:
-                                            "center",
-                                        padding:
-                                            "20px",
-                                        color:
-                                            "#888",
-                                    }}
-                                >
-                                    No messages in
-                                    this chat yet.
-                                </div>
+                                    <div
+                                        style={{
+                                            textAlign:
+                                                "center",
+                                            padding:
+                                                "20px",
+                                            color:
+                                                "#888",
+                                        }}
+                                    >
+                                        No messages in
+                                        this chat yet.
+                                    </div>
 
-                            ) : (
+                                ) : (
 
-                                messages.map(
-                                    (
-                                        item,
-                                        index
-                                    ) => {
+                                    messages.map(
+                                        (
+                                            item,
+                                            index
+                                        ) => {
 
-                                        const senderId =
-                                            item.sender_id ||
-                                            item.senderId ||
-                                            item.user_id;
-
-
-                                        const isOwnMessage =
-                                            item.is_self ||
-                                            (
-                                                currentUserId &&
-                                                String(
-                                                    senderId
-                                                ) ===
-                                                String(
-                                                    currentUserId
-                                                )
-                                            );
+                                            const senderId =
+                                                item.sender_id ||
+                                                item.senderId ||
+                                                item.user_id;
 
 
-                                        const attachmentUrl =
-                                            normalizeFileUrl(
-                                                item.file_url
-                                            );
+                                            const isCall =
+                                                item.message_type === "call";
 
 
-                                        const isImage =
-                                            !!attachmentUrl &&
-                                            (
-                                                item.message_type ===
-                                                "image" ||
-                                                String(
-                                                    item.mime_type ||
-                                                    ""
-                                                ).startsWith(
-                                                    "image/"
-                                                )
-                                            );
+                                            let callData = {};
 
-
-                                        const isFile =
-                                            !!attachmentUrl &&
-                                            !isImage;
-
-                                        const isCall =
-                                            item.message_type === "call";
-
-                                        let callData = {};
-
-                                        if (isCall) {
-                                            try {
-                                                callData =
-                                                    typeof item.content === "string"
-                                                        ? JSON.parse(item.content)
-                                                        : item.content || {};
-                                            } catch (error) {
-                                                callData = {};
-                                            }
-                                        }
-
-                                        const callType =
-                                            callData?.call_type === "video"
-                                                ? "video"
-                                                : "audio";
-
-                                        const callDuration =
-                                            Number(callData?.duration) || 0;
-
-
-                                        return (
-
-                                            <div
-                                                key={
-                                                    item.id ||
-                                                    index
+                                            if (isCall) {
+                                                try {
+                                                    callData =
+                                                        typeof item.content === "string"
+                                                            ? JSON.parse(item.content)
+                                                            : item.content || {};
+                                                } catch (error) {
+                                                    callData = {};
                                                 }
-                                                className={`${styles.messageRow} ${isOwnMessage
-                                                    ? styles.ownMessageRow
-                                                    : styles.otherMessageRow
-                                                    }`}
-                                            >
+                                            }
+
+
+                                            const isOwnMessage =
+                                                isCall
+                                                    ? (
+                                                        currentUserId &&
+                                                        String(
+                                                            callData?.call_initiator_id ||
+                                                            senderId
+                                                        ) ===
+                                                        String(
+                                                            currentUserId
+                                                        )
+                                                    )
+                                                    : (
+                                                        item.is_self ||
+                                                        (
+                                                            currentUserId &&
+                                                            String(
+                                                                senderId
+                                                            ) ===
+                                                            String(
+                                                                currentUserId
+                                                            )
+                                                        )
+                                                    );
+
+
+                                            const attachmentUrl =
+                                                normalizeFileUrl(
+                                                    item.file_url
+                                                );
+
+
+                                            const isImage =
+                                                !!attachmentUrl &&
+                                                (
+                                                    item.message_type ===
+                                                    "image" ||
+                                                    String(
+                                                        item.mime_type ||
+                                                        ""
+                                                    ).startsWith(
+                                                        "image/"
+                                                    )
+                                                );
+
+                                            const isAudio =
+                                                !!attachmentUrl &&
+                                                (
+                                                    item.message_type ===
+                                                    "audio" ||
+                                                    String(
+                                                        item.mime_type ||
+                                                        ""
+                                                    ).startsWith(
+                                                        "audio/"
+                                                    )
+                                                );
+
+                                            const isFile =
+                                                !!attachmentUrl &&
+                                                !isImage &&
+                                                !isAudio;
+
+
+                                            const callType =
+                                                callData?.call_type === "video"
+                                                    ? "video"
+                                                    : "audio";
+
+                                            const callDuration =
+                                                Number(callData?.duration) || 0;
+
+
+                                            return (
 
                                                 <div
-                                                    className={`${styles.messageBubble} ${isOwnMessage
-                                                        ? styles.ownMessage
-                                                        : styles.otherMessage
+                                                    key={
+                                                        item.id ||
+                                                        index
+                                                    }
+                                                    className={`${styles.messageRow} ${isOwnMessage
+                                                        ? styles.ownMessageRow
+                                                        : styles.otherMessageRow
                                                         }`}
                                                 >
+
                                                     <div
-                                                        style={{
-                                                            width: attachmentUrl ? "fit-content" : "auto",
-                                                            maxWidth: "100%",
-                                                        }}
+                                                        className={`${styles.messageBubble} ${isOwnMessage
+                                                            ? styles.ownMessage
+                                                            : styles.otherMessage
+                                                            }`}
                                                     >
-                                                        {/* =================================================
+                                                        <div
+                                                            style={{
+                                                                width: attachmentUrl ? "fit-content" : "auto",
+                                                                maxWidth: "100%",
+                                                            }}
+                                                        >
+                                                            {/* =================================================
                                                         ATTACHMENT / CONTENT
                                                     ================================================= */}
 
-                                                        <div>
+                                                            <div>
 
-                                                            {/* IMAGE */}
+                                                                {/* IMAGE */}
 
-                                                            {isImage && (
+                                                                {isImage && (
 
-                                                                <div
-                                                                    style={{
-                                                                        marginBottom:
-                                                                            item.content &&
-                                                                                item.content !==
-                                                                                "Attachment"
-                                                                                ? "8px"
-                                                                                : "0",
-                                                                    }}
-                                                                >
+                                                                    <div
+                                                                        style={{
+                                                                            marginBottom:
+                                                                                item.content &&
+                                                                                    item.content !==
+                                                                                    "Attachment"
+                                                                                    ? "8px"
+                                                                                    : "0",
+                                                                        }}
+                                                                    >
+
+                                                                        <div
+                                                                            onClick={() =>
+                                                                                openAttachmentPreview(
+                                                                                    attachmentUrl,
+                                                                                    item.file_name,
+                                                                                    item.mime_type
+                                                                                )
+                                                                            }
+                                                                            style={{
+                                                                                cursor: "pointer",
+                                                                                display: "inline-block",
+                                                                            }}
+                                                                        >
+                                                                            <img
+                                                                                src={attachmentUrl}
+                                                                                alt={item.file_name || "Image"}
+                                                                                style={{
+                                                                                    maxWidth: "280px",
+                                                                                    maxHeight: "300px",
+                                                                                    borderRadius: "10px",
+                                                                                    display: "block",
+                                                                                    objectFit: "contain",
+                                                                                }}
+                                                                            />
+                                                                        </div>
+
+                                                                    </div>
+
+                                                                )}
+
+
+                                                                {/* AUDIO / VOICE MESSAGE */}
+                                                                {isAudio && (
+                                                                    <VoiceMessagePlayer
+                                                                        audioUrl={attachmentUrl}
+                                                                        isOwnMessage={isOwnMessage}
+                                                                        darkMode={darkMode}
+                                                                        messageId={item.id}
+                                                                    />
+                                                                )}
+
+
+                                                                {/* FILE */}
+
+                                                                {isFile && (
 
                                                                     <div
                                                                         onClick={() =>
@@ -4785,388 +5385,357 @@ const ChatPage = () => {
                                                                             )
                                                                         }
                                                                         style={{
-                                                                            cursor: "pointer",
-                                                                            display: "inline-block",
-                                                                        }}
-                                                                    >
-                                                                        <img
-                                                                            src={attachmentUrl}
-                                                                            alt={item.file_name || "Image"}
-                                                                            style={{
-                                                                                maxWidth: "280px",
-                                                                                maxHeight: "300px",
-                                                                                borderRadius: "10px",
-                                                                                display: "block",
-                                                                                objectFit: "contain",
-                                                                            }}
-                                                                        />
-                                                                    </div>
-
-                                                                </div>
-
-                                                            )}
-
-
-                                                            {/* FILE */}
-
-                                                            {isFile && (
-
-                                                                <div
-                                                                    onClick={() =>
-                                                                        openAttachmentPreview(
-                                                                            attachmentUrl,
-                                                                            item.file_name,
-                                                                            item.mime_type
-                                                                        )
-                                                                    }
-                                                                    style={{
-                                                                        display: "flex",
-                                                                        alignItems: "center",
-                                                                        gap: "10px",
-                                                                        padding: "10px",
-                                                                        borderRadius: "8px",
-                                                                        background: "rgba(0,0,0,0.05)",
-                                                                        cursor: "pointer",
-                                                                    }}
-                                                                >
-
-                                                                    <FileImageOutlined
-                                                                        style={{
-                                                                            fontSize:
-                                                                                "24px",
-                                                                        }}
-                                                                    />
-
-
-                                                                    <div
-                                                                        style={{
-                                                                            flex:
-                                                                                1,
-                                                                            minWidth:
-                                                                                0,
-                                                                        }}
-                                                                    >
-
-                                                                        <div
-                                                                            style={{
-                                                                                fontWeight:
-                                                                                    600,
-                                                                                wordBreak:
-                                                                                    "break-word",
-                                                                            }}
-                                                                        >
-                                                                            {
-                                                                                item.file_name ||
-                                                                                "Attached file"
-                                                                            }
-                                                                        </div>
-
-
-                                                                        {item.file_size && (
-
-                                                                            <Text
-                                                                                type="secondary"
-                                                                            >
-                                                                                {(
-                                                                                    item.file_size /
-                                                                                    1024 /
-                                                                                    1024
-                                                                                ).toFixed(
-                                                                                    2
-                                                                                )}{" "}
-                                                                                MB
-                                                                            </Text>
-
-                                                                        )}
-
-                                                                    </div>
-
-
-                                                                    {/* DOWNLOAD BUTTON */}
-
-                                                                    {!downloadedFiles.has(
-                                                                        String(
-                                                                            item.id
-                                                                        )
-                                                                    ) && (
-
-                                                                            <a
-                                                                                href={
-                                                                                    attachmentUrl
-                                                                                }
-                                                                                download={
-                                                                                    item.file_name ||
-                                                                                    "attachment"
-                                                                                }
-                                                                                onClick={(
-                                                                                    event
-                                                                                ) => {
-                                                                                    event.stopPropagation();
-                                                                                    handleFileDownload(
-                                                                                        event,
-                                                                                        item.id
-                                                                                    );
-                                                                                }}
-                                                                            >
-
-                                                                                <Button
-                                                                                    type="text"
-                                                                                    icon={
-                                                                                        <DownloadOutlined />
-                                                                                    }
-                                                                                />
-
-                                                                            </a>
-
-                                                                        )}
-
-                                                                </div>
-
-                                                            )}
-
-
-                                                            {/* CALL MESSAGE */}
-
-                                                            {item.message_type === "call" && (() => {
-
-                                                                let callData = {};
-
-                                                                try {
-                                                                    callData =
-                                                                        typeof item.content === "string"
-                                                                            ? JSON.parse(item.content)
-                                                                            : item.content || {};
-                                                                } catch (error) {
-                                                                    callData = {};
-                                                                }
-
-                                                                const callType =
-                                                                    callData?.call_type === "video"
-                                                                        ? "video"
-                                                                        : "audio";
-
-                                                                const duration =
-                                                                    Number(callData?.duration) || 0;
-
-                                                                return (
-                                                                    <div
-                                                                        style={{
                                                                             display: "flex",
                                                                             alignItems: "center",
-                                                                            gap: "12px",
-                                                                            minWidth: "180px",
-                                                                            padding: "8px 4px",
+                                                                            gap: "10px",
+                                                                            padding: "10px",
+                                                                            borderRadius: "8px",
+                                                                            background: "rgba(0,0,0,0.05)",
+                                                                            cursor: "pointer",
                                                                         }}
                                                                     >
 
+                                                                        <FileImageOutlined
+                                                                            style={{
+                                                                                fontSize:
+                                                                                    "24px",
+                                                                            }}
+                                                                        />
+
+
                                                                         <div
                                                                             style={{
-                                                                                fontSize: "28px",
+                                                                                flex:
+                                                                                    1,
+                                                                                minWidth:
+                                                                                    0,
                                                                             }}
                                                                         >
-                                                                            {callType === "video"
-                                                                                ? "📹"
-                                                                                : "📞"}
-                                                                        </div>
-
-                                                                        <div>
 
                                                                             <div
                                                                                 style={{
-                                                                                    fontWeight: "600",
-                                                                                    fontSize: "14px",
+                                                                                    fontWeight:
+                                                                                        600,
+                                                                                    wordBreak:
+                                                                                        "break-word",
                                                                                 }}
                                                                             >
-                                                                                {callType === "video"
-                                                                                    ? "Video call"
-                                                                                    : "Audio call"}
+                                                                                {
+                                                                                    item.file_name ||
+                                                                                    "Attached file"
+                                                                                }
                                                                             </div>
 
-                                                                            <div
-                                                                                style={{
-                                                                                    fontSize: "13px",
-                                                                                    opacity: 0.7,
-                                                                                    marginTop: "2px",
-                                                                                }}
-                                                                            >
-                                                                                {formatCallDuration(
-                                                                                    duration
-                                                                                )}
-                                                                            </div>
+
+                                                                            {item.file_size && (
+
+                                                                                <Text
+                                                                                    type="secondary"
+                                                                                >
+                                                                                    {(
+                                                                                        item.file_size /
+                                                                                        1024 /
+                                                                                        1024
+                                                                                    ).toFixed(
+                                                                                        2
+                                                                                    )}{" "}
+                                                                                    MB
+                                                                                </Text>
+
+                                                                            )}
 
                                                                         </div>
 
-                                                                    </div>
-                                                                );
 
-                                                            })()}
+                                                                        {/* DOWNLOAD BUTTON */}
 
+                                                                        {!downloadedFiles.has(
+                                                                            String(
+                                                                                item.id
+                                                                            )
+                                                                        ) && (
 
-                                                            {/* TEXT */}
+                                                                                <a
+                                                                                    href={
+                                                                                        attachmentUrl
+                                                                                    }
+                                                                                    download={
+                                                                                        item.file_name ||
+                                                                                        "attachment"
+                                                                                    }
+                                                                                    onClick={(
+                                                                                        event
+                                                                                    ) => {
+                                                                                        event.stopPropagation();
+                                                                                        handleFileDownload(
+                                                                                            event,
+                                                                                            item.id
+                                                                                        );
+                                                                                    }}
+                                                                                >
 
-                                                            {item.message_type !== "call" &&
-                                                                item.content &&
-                                                                item.content !==
-                                                                "Attachment" && (
+                                                                                    <Button
+                                                                                        type="text"
+                                                                                        icon={
+                                                                                            <DownloadOutlined />
+                                                                                        }
+                                                                                    />
 
-                                                                    <div>
-                                                                        {
-                                                                            item.content
-                                                                        }
+                                                                                </a>
+
+                                                                            )}
+
                                                                     </div>
 
                                                                 )}
 
-                                                        </div>
 
+                                                                {/* CALL MESSAGE */}
 
-                                                        {/* =================================================
-                                                        EDIT / DELETE
-                                                    ================================================= */}
+                                                                {item.message_type === "call" && (() => {
 
-                                                        {isOwnMessage &&
-                                                            item.message_type !== "call" &&
-                                                            canModifyMessage(
-                                                                item
-                                                            ) && (
+                                                                    let callData = {};
 
-                                                                <div
-                                                                    style={{
-                                                                        display:
-                                                                            "flex",
-                                                                        justifyContent:
-                                                                            "flex-end",
-                                                                        gap:
-                                                                            "6px",
-                                                                        marginTop:
-                                                                            "6px",
-                                                                    }}
-                                                                >
-
-                                                                    <Button
-                                                                        type="link"
-                                                                        size="small"
-                                                                        onClick={() =>
-                                                                            handleStartEdit(
-                                                                                item
-                                                                            )
-                                                                        }
-                                                                        style={{
-                                                                            padding:
-                                                                                0,
-                                                                            height:
-                                                                                "auto",
-                                                                            fontSize:
-                                                                                "11px",
-                                                                        }}
-                                                                    >
-                                                                        Edit
-                                                                    </Button>
-
-
-                                                                    <Button
-                                                                        type="link"
-                                                                        danger
-                                                                        size="small"
-                                                                        onClick={() =>
-                                                                            handleDeleteMessage(
-                                                                                item.id
-                                                                            )
-                                                                        }
-                                                                        style={{
-                                                                            padding:
-                                                                                0,
-                                                                            height:
-                                                                                "auto",
-                                                                            fontSize:
-                                                                                "11px",
-                                                                        }}
-                                                                    >
-                                                                        Delete
-                                                                    </Button>
-
-                                                                </div>
-
-                                                            )}
-
-
-                                                        {/* =================================================
-                                                        TIME + DELIVERY
-                                                    ================================================= */}
-
-                                                        <div
-                                                            style={{
-                                                                display:
-                                                                    "flex",
-                                                                alignItems:
-                                                                    "center",
-                                                                justifyContent:
-                                                                    "flex-end",
-                                                                gap:
-                                                                    "4px",
-                                                                marginTop:
-                                                                    "2px",
-                                                            }}
-                                                        >
-
-                                                            <span
-                                                                className={
-                                                                    styles.messageTime
-                                                                }
-                                                            >
-                                                                {item.created_at
-                                                                    ? new Date(
-                                                                        item.created_at
-                                                                    ).toLocaleTimeString(
-                                                                        [],
-                                                                        {
-                                                                            hour:
-                                                                                "2-digit",
-                                                                            minute:
-                                                                                "2-digit",
-                                                                        }
-                                                                    )
-                                                                    : "Just now"}
-                                                            </span>
-
-
-                                                            {isOwnMessage && (
-
-                                                                <span
-                                                                    className={
-                                                                        item.is_read
-                                                                            ? styles.messageReadStatus
-                                                                            : item.is_delivered
-                                                                                ? styles.messageDeliveredStatus
-                                                                                : styles.messageSentStatus
+                                                                    try {
+                                                                        callData =
+                                                                            typeof item.content === "string"
+                                                                                ? JSON.parse(item.content)
+                                                                                : item.content || {};
+                                                                    } catch (error) {
+                                                                        callData = {};
                                                                     }
-                                                                >
 
-                                                                    {item.is_delivered ||
-                                                                        item.is_read ? (
+                                                                    const callType =
+                                                                        callData?.call_type === "video"
+                                                                            ? "video"
+                                                                            : "audio";
 
-                                                                        <>
+                                                                    const duration =
+                                                                        Number(callData?.duration) || 0;
 
-                                                                            <CheckOutlined />
+                                                                    return (
+                                                                        <div
+                                                                            style={{
+                                                                                display: "flex",
+                                                                                alignItems: "center",
+                                                                                gap: "12px",
+                                                                                minWidth: "180px",
+                                                                                padding: "8px 4px",
+                                                                            }}
+                                                                        >
 
-                                                                            <CheckOutlined
+                                                                            <div
                                                                                 style={{
-                                                                                    marginLeft:
-                                                                                        "-5px",
+                                                                                    fontSize: "28px",
                                                                                 }}
-                                                                            />
+                                                                            >
+                                                                                {callType === "video"
+                                                                                    ? "📹"
+                                                                                    : "📞"}
+                                                                            </div>
 
-                                                                        </>
+                                                                            <div>
 
-                                                                    ) : (
+                                                                                <div
+                                                                                    style={{
+                                                                                        fontWeight: "600",
+                                                                                        fontSize: "14px",
+                                                                                    }}
+                                                                                >
+                                                                                    {callType === "video"
+                                                                                        ? "Video call"
+                                                                                        : "Audio call"}
+                                                                                </div>
 
-                                                                        <CheckOutlined />
+                                                                                <div
+                                                                                    style={{
+                                                                                        fontSize: "13px",
+                                                                                        opacity: 0.7,
+                                                                                        marginTop: "2px",
+                                                                                    }}
+                                                                                >
+                                                                                    {formatCallDuration(
+                                                                                        duration
+                                                                                    )}
+                                                                                </div>
+
+                                                                            </div>
+
+                                                                        </div>
+                                                                    );
+
+                                                                })()}
+
+
+                                                                {/* TEXT */}
+
+                                                                {item.message_type !== "call" &&
+                                                                    item.content &&
+                                                                    item.content !==
+                                                                    "Attachment" &&
+                                                                    item.content !==
+                                                                    "Voice message" && (
+
+                                                                        <div>
+                                                                            {
+                                                                                item.content
+                                                                            }
+                                                                        </div>
 
                                                                     )}
 
+                                                            </div>
+
+
+                                                            {/* =================================================
+                                                        EDIT / DELETE
+                                                    ================================================= */}
+
+                                                            {isOwnMessage &&
+                                                                item.message_type !== "call" &&
+                                                                canModifyMessage(
+                                                                    item
+                                                                ) && (
+
+                                                                    <div
+                                                                        style={{
+                                                                            display:
+                                                                                "flex",
+                                                                            justifyContent:
+                                                                                "flex-end",
+                                                                            gap:
+                                                                                "6px",
+                                                                            marginTop:
+                                                                                "6px",
+                                                                        }}
+                                                                    >
+
+                                                                        <Button
+                                                                            type="link"
+                                                                            size="small"
+                                                                            onClick={() =>
+                                                                                handleStartEdit(
+                                                                                    item
+                                                                                )
+                                                                            }
+                                                                            style={{
+                                                                                padding:
+                                                                                    0,
+                                                                                height:
+                                                                                    "auto",
+                                                                                fontSize:
+                                                                                    "11px",
+                                                                            }}
+                                                                        >
+                                                                            Edit
+                                                                        </Button>
+
+
+                                                                        <Button
+                                                                            type="link"
+                                                                            danger
+                                                                            size="small"
+                                                                            onClick={() =>
+                                                                                handleDeleteMessage(
+                                                                                    item.id
+                                                                                )
+                                                                            }
+                                                                            style={{
+                                                                                padding:
+                                                                                    0,
+                                                                                height:
+                                                                                    "auto",
+                                                                                fontSize:
+                                                                                    "11px",
+                                                                            }}
+                                                                        >
+                                                                            Delete
+                                                                        </Button>
+
+                                                                    </div>
+
+                                                                )}
+
+
+                                                            {/* =================================================
+                                                        TIME + DELIVERY
+                                                    ================================================= */}
+
+                                                            <div
+                                                                style={{
+                                                                    display:
+                                                                        "flex",
+                                                                    alignItems:
+                                                                        "center",
+                                                                    justifyContent:
+                                                                        "flex-end",
+                                                                    gap:
+                                                                        "4px",
+                                                                    marginTop:
+                                                                        "2px",
+                                                                }}
+                                                            >
+
+                                                                <span
+                                                                    className={
+                                                                        styles.messageTime
+                                                                    }
+                                                                >
+                                                                    {item.created_at
+                                                                        ? new Date(
+                                                                            item.created_at
+                                                                        ).toLocaleTimeString(
+                                                                            [],
+                                                                            {
+                                                                                hour:
+                                                                                    "2-digit",
+                                                                                minute:
+                                                                                    "2-digit",
+                                                                            }
+                                                                        )
+                                                                        : "Just now"}
                                                                 </span>
 
-                                                            )}
+
+                                                                {isOwnMessage && (
+
+                                                                    <span
+                                                                        className={
+                                                                            item.is_read
+                                                                                ? styles.messageReadStatus
+                                                                                : item.is_delivered
+                                                                                    ? styles.messageDeliveredStatus
+                                                                                    : styles.messageSentStatus
+                                                                        }
+                                                                    >
+
+                                                                        {item.is_delivered ||
+                                                                            item.is_read ? (
+
+                                                                            <>
+
+                                                                                <CheckOutlined />
+
+                                                                                <CheckOutlined
+                                                                                    style={{
+                                                                                        marginLeft:
+                                                                                            "-5px",
+                                                                                    }}
+                                                                                />
+
+                                                                            </>
+
+                                                                        ) : (
+
+                                                                            <CheckOutlined />
+
+                                                                        )}
+
+                                                                    </span>
+
+                                                                )}
+
+                                                            </div>
 
                                                         </div>
 
@@ -5174,409 +5743,395 @@ const ChatPage = () => {
 
                                                 </div>
 
-                                            </div>
+                                            );
+                                        }
+                                    )
 
-                                        );
-                                    }
-                                )
-
-                            )}
+                                )}
 
 
-                            {/* TYPING */}
+                                {/* TYPING */}
 
-                            {isPartnerTyping && (
-
-                                <div
-                                    className={
-                                        styles.messageRow
-                                    }
-                                >
+                                {isPartnerTyping && (
 
                                     <div
-                                        className={`${styles.messageBubble} ${styles.otherMessage}`}
-                                        style={{
-                                            fontStyle:
-                                                "italic",
-                                            color:
-                                                "#666",
-                                        }}
+                                        className={
+                                            styles.messageRow
+                                        }
                                     >
-                                        typing...
+
+                                        <div
+                                            className={`${styles.messageBubble} ${styles.otherMessage}`}
+                                            style={{
+                                                fontStyle:
+                                                    "italic",
+                                                color:
+                                                    "#666",
+                                            }}
+                                        >
+                                            typing...
+                                        </div>
+
                                     </div>
 
-                                </div>
-
-                            )}
+                                )}
 
 
-                            <div
-                                ref={
-                                    messagesEndRef
-                                }
-                            />
+                                <div
+                                    ref={
+                                        messagesEndRef
+                                    }
+                                />
 
-                        </section>
+                            </section>
 
 
-                        {/* =================================================
+                            {/* =================================================
                             INPUT
                         ================================================= */}
 
-                        <footer
-                            className={
-                                styles.messageInputArea
-                            }
-                        >
-
-                            <input
-                                id="chat-file-input"
-                                type="file"
-                                accept="image/*,.pdf,.txt,.doc,.docx,.xls,.xlsx,.zip"
-                                style={{
-                                    display:
-                                        "none",
-                                }}
-                                onChange={
-                                    handleFileSelect
-                                }
-                            />
-
-
-                            <Button
-                                size="large"
-                                icon={
-                                    <PaperClipOutlined />
-                                }
-                                onClick={() =>
-                                    document
-                                        .getElementById(
-                                            "chat-file-input"
-                                        )
-                                        ?.click()
-                                }
-                                disabled={
-                                    uploadingFile
-                                }
-                            />
-
-
-                            <Input
-                                size="large"
-                                placeholder={
-                                    selectedFile
-                                        ? selectedFile.name
-                                        : editingMessageId
-                                            ? "Edit message..."
-                                            : "Type a message..."
-                                }
-                                value={
-                                    messageText
-                                }
-                                onChange={
-                                    handleInputChange
-                                }
-                                onKeyDown={
-                                    handleKeyDown
-                                }
-                                disabled={
-                                    uploadingFile
-                                }
-                            />
-
-
-                            {editingMessageId && (
-
-                                <Button
-                                    htmlType="button"
-                                    size="large"
-                                    onClick={(event) => {
-                                        event.preventDefault();
-                                        event.stopPropagation();
-
-                                        handleCancelEdit();
-                                    }}
-                                >
-                                    Cancel
-                                </Button>
-
-                            )}
-
-
-                            <Button
-                                htmlType="button"
-                                type="primary"
-                                size="large"
-                                icon={
-                                    <SendOutlined />
-                                }
-                                onClick={(event) => {
-                                    event.preventDefault();
-                                    event.stopPropagation();
-
-                                    handleSendMessage();
-                                }}
-                                loading={
-                                    uploadingFile
+                            <footer
+                                className={
+                                    styles.messageInputArea
                                 }
                             >
-                                {editingMessageId
-                                    ? "Update"
-                                    : "Send"}
-                            </Button>
 
-                        </footer>
-
-                    </>
-
-                ) : (
-
-                    <div
-                        style={{
-                            display:
-                                "flex",
-                            justifyContent:
-                                "center",
-                            alignItems:
-                                "center",
-                            height:
-                                "100%",
-                            color:
-                                "#888",
-                        }}
-                    >
-                        Select a conversation or
-                        click "+ New" to start a chat
-                    </div>
-
-                )}
-
-            </main>
+                                <input
+                                    id="chat-file-input"
+                                    type="file"
+                                    accept="image/*,.pdf,.txt,.doc,.docx,.xls,.xlsx,.zip"
+                                    style={{
+                                        display:
+                                            "none",
+                                    }}
+                                    onChange={
+                                        handleFileSelect
+                                    }
+                                />
 
 
-            {/* =================================================
+                                <audio
+                                    ref={previewAudioRef}
+                                    src={recordedVoice?.url || ""}
+                                    onTimeUpdate={() => {
+                                        if (previewAudioRef.current) {
+                                            setPreviewCurrentTime(
+                                                previewAudioRef.current
+                                                    .currentTime
+                                            );
+                                        }
+                                    }}
+                                    onEnded={() => {
+                                        setIsPreviewPlaying(false);
+                                        setPreviewCurrentTime(0);
+                                    }}
+                                    onPause={() => setIsPreviewPlaying(false)}
+                                    onPlay={() => setIsPreviewPlaying(true)}
+                                    style={{ display: "none" }}
+                                />
+
+                                {isRecordingVoice ? (
+                                    /* =================================================
+                                       WHATSAPP-STYLE RECORDING BAR
+                                    ================================================= */
+                                    <div className={styles.voiceRecordingBar}>
+                                        <Button
+                                            type="text"
+                                            danger
+                                            icon={<DeleteOutlined />}
+                                            className={styles.voiceCancelBtn}
+                                            onClick={cancelVoiceRecording}
+                                            title="Discard recording"
+                                            size="large"
+                                        />
+
+                                        <div className={styles.voiceRecordingIndicator}>
+                                            <span className={styles.recordingPulseDot} />
+                                            <span className={styles.recordingTimerText}>
+                                                {formatVoiceTime(voiceRecordingDuration)}
+                                            </span>
+                                            <div className={styles.recordingWaves}>
+                                                <span className={styles.waveBar} />
+                                                <span className={styles.waveBar} />
+                                                <span className={styles.waveBar} />
+                                                <span className={styles.waveBar} />
+                                            </div>
+                                        </div>
+
+                                        <div className={styles.voiceRecordingActions}>
+                                            <Button
+                                                type="default"
+                                                className={styles.voiceStopPreviewBtn}
+                                                onClick={stopRecordingToPreview}
+                                                title="Preview voice message"
+                                                size="large"
+                                            >
+                                                Stop
+                                            </Button>
+
+                                            <Button
+                                                type="primary"
+                                                icon={<SendOutlined />}
+                                                className={styles.voiceSendBtn}
+                                                onClick={stopRecordingAndSend}
+                                                loading={uploadingFile}
+                                                title="Send voice message"
+                                                size="large"
+                                            />
+                                        </div>
+                                    </div>
+                                ) : recordedVoice ? (
+                                    /* =================================================
+                                       WHATSAPP-STYLE VOICE PREVIEW BAR
+                                    ================================================= */
+                                    <div className={styles.voicePreviewBar}>
+                                        <Button
+                                            type="text"
+                                            danger
+                                            icon={<DeleteOutlined />}
+                                            className={styles.voiceCancelBtn}
+                                            onClick={discardVoicePreview}
+                                            title="Delete recording"
+                                            size="large"
+                                            disabled={uploadingFile}
+                                        />
+
+                                        <button
+                                            type="button"
+                                            className={styles.voicePreviewPlayBtn}
+                                            onClick={togglePreviewPlayback}
+                                            disabled={uploadingFile}
+                                            aria-label={
+                                                isPreviewPlaying
+                                                    ? "Pause preview"
+                                                    : "Play preview"
+                                            }
+                                        >
+                                            {isPreviewPlaying ? (
+                                                <PauseOutlined />
+                                            ) : (
+                                                <CaretRightOutlined />
+                                            )}
+                                        </button>
+
+                                        <div
+                                            className={styles.voicePreviewWaveformWrapper}
+                                            onClick={seekPreviewPlayback}
+                                            title="Seek preview"
+                                        >
+                                            <div
+                                                className={styles.voicePreviewProgressBar}
+                                                style={{
+                                                    width: `${recordedVoice.duration > 0
+                                                            ? Math.min(
+                                                                100,
+                                                                (previewCurrentTime /
+                                                                    recordedVoice.duration) *
+                                                                100
+                                                            )
+                                                            : 0
+                                                        }%`,
+                                                }}
+                                            />
+                                        </div>
+
+                                        <span className={styles.voicePreviewTime}>
+                                            {formatVoiceTime(previewCurrentTime)} /{" "}
+                                            {formatVoiceTime(recordedVoice.duration)}
+                                        </span>
+
+                                        <Button
+                                            type="primary"
+                                            icon={<SendOutlined />}
+                                            className={styles.voiceSendBtn}
+                                            onClick={sendRecordedVoice}
+                                            loading={uploadingFile}
+                                            title="Send voice message"
+                                            size="large"
+                                        />
+                                    </div>
+                                ) : (
+                                    /* =================================================
+                                       NORMAL COMPOSER
+                                    ================================================= */
+                                    <>
+                                        <Button
+                                            size="large"
+                                            icon={<PaperClipOutlined />}
+                                            onClick={() =>
+                                                document
+                                                    .getElementById("chat-file-input")
+                                                    ?.click()
+                                            }
+                                            disabled={uploadingFile}
+                                        />
+
+                                        <Button
+                                            size="large"
+                                            icon={<AudioOutlined />}
+                                            className={styles.voiceMicBtn}
+                                            onClick={startVoiceRecording}
+                                            disabled={uploadingFile}
+                                            title="Record voice message"
+                                        />
+
+                                        <Input
+                                            size="large"
+                                            placeholder={
+                                                selectedFile
+                                                    ? selectedFile.name
+                                                    : editingMessageId
+                                                        ? "Edit message..."
+                                                        : "Type a message..."
+                                            }
+                                            value={messageText}
+                                            onChange={handleInputChange}
+                                            onKeyDown={handleKeyDown}
+                                            disabled={uploadingFile}
+                                        />
+
+                                        {editingMessageId && (
+                                            <Button
+                                                htmlType="button"
+                                                size="large"
+                                                onClick={(event) => {
+                                                    event.preventDefault();
+                                                    event.stopPropagation();
+                                                    handleCancelEdit();
+                                                }}
+                                            >
+                                                Cancel
+                                            </Button>
+                                        )}
+
+                                        <Button
+                                            htmlType="button"
+                                            type="primary"
+                                            size="large"
+                                            icon={<SendOutlined />}
+                                            onClick={(event) => {
+                                                event.preventDefault();
+                                                event.stopPropagation();
+                                                handleSendMessage();
+                                            }}
+                                            loading={uploadingFile}
+                                        >
+                                            {editingMessageId ? "Update" : "Send"}
+                                        </Button>
+                                    </>
+                                )}
+
+                            </footer>
+
+                        </>
+
+                    ) : (
+
+                        <div
+                            style={{
+                                display:
+                                    "flex",
+                                justifyContent:
+                                    "center",
+                                alignItems:
+                                    "center",
+                                height:
+                                    "100%",
+                                color:
+                                    "#888",
+                            }}
+                        >
+                            Select a conversation or
+                            click "+ New" to start a chat
+                        </div>
+
+                    )}
+
+                </main>
+
+
+                {/* =================================================
                 ATTACHMENT PREVIEW MODAL
             ================================================= */}
 
-            {previewAttachment && (() => {
-                const mime = String(
-                    previewAttachment.mimeType || ""
-                ).toLowerCase();
+                {previewAttachment && (() => {
+                    const mime = String(
+                        previewAttachment.mimeType || ""
+                    ).toLowerCase();
 
-                const isPreviewImage =
-                    mime.startsWith("image/");
+                    const isPreviewImage =
+                        mime.startsWith("image/");
 
-                const isPreviewPdf =
-                    mime === "application/pdf" ||
-                    previewAttachment.fileName
-                        ?.toLowerCase()
-                        .endsWith(".pdf");
+                    const isPreviewPdf =
+                        mime === "application/pdf" ||
+                        previewAttachment.fileName
+                            ?.toLowerCase()
+                            .endsWith(".pdf");
 
-                // Files the browser can embed in an iframe
-                const isBrowserPreviewable =
-                    isPreviewImage ||
-                    isPreviewPdf ||
-                    mime.startsWith("text/") ||
-                    mime === "application/json";
+                    // Files the browser can embed in an iframe
+                    const isBrowserPreviewable =
+                        isPreviewImage ||
+                        isPreviewPdf ||
+                        mime.startsWith("text/") ||
+                        mime === "application/json";
 
-                return (
-                    <div
-                        style={{
-                            position: "fixed",
-                            inset: 0,
-                            zIndex: 20000,
-                            background: "rgba(0, 0, 0, 0.88)",
-                            display: "flex",
-                            flexDirection: "column",
-                            alignItems: "center",
-                            justifyContent: "center",
-                        }}
-                        onClick={() =>
-                            setPreviewAttachment(null)
-                        }
-                    >
-                        {/* Header bar */}
+                    return (
                         <div
                             style={{
-                                position: "absolute",
-                                top: 0,
-                                left: 0,
-                                right: 0,
-                                height: "56px",
-                                background: "rgba(0,0,0,0.6)",
+                                position: "fixed",
+                                inset: 0,
+                                zIndex: 20000,
+                                background: "rgba(0, 0, 0, 0.88)",
                                 display: "flex",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                padding: "0 20px",
-                                zIndex: 1,
-                            }}
-                            onClick={(e) =>
-                                e.stopPropagation()
-                            }
-                        >
-                            <span
-                                style={{
-                                    color: "#e9edef",
-                                    fontSize: "14px",
-                                    fontWeight: 600,
-                                    maxWidth: "60%",
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                    whiteSpace: "nowrap",
-                                }}
-                            >
-                                {previewAttachment.fileName}
-                            </span>
-
-                            <div
-                                style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: "8px",
-                                }}
-                            >
-                                {/* Download button in viewer */}
-                                <a
-                                    href={
-                                        previewAttachment.url
-                                    }
-                                    download={
-                                        previewAttachment.fileName ||
-                                        "attachment"
-                                    }
-                                    onClick={(e) =>
-                                        e.stopPropagation()
-                                    }
-                                    style={{
-                                        color: "#e9edef",
-                                        fontSize: "20px",
-                                        lineHeight: 1,
-                                        padding: "6px 10px",
-                                        borderRadius: "8px",
-                                        background:
-                                            "rgba(255,255,255,0.1)",
-                                        display: "flex",
-                                        alignItems: "center",
-                                    }}
-                                    title="Download"
-                                >
-                                    <DownloadOutlined />
-                                </a>
-
-                                {/* Close button */}
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        setPreviewAttachment(
-                                            null
-                                        )
-                                    }
-                                    style={{
-                                        background:
-                                            "rgba(255,255,255,0.1)",
-                                        border: "none",
-                                        borderRadius: "8px",
-                                        color: "#e9edef",
-                                        cursor: "pointer",
-                                        fontSize: "18px",
-                                        padding: "6px 10px",
-                                        display: "flex",
-                                        alignItems: "center",
-                                    }}
-                                    title="Close (Esc)"
-                                >
-                                    <CloseOutlined />
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Viewer body */}
-                        <div
-                            style={{
-                                marginTop: "56px",
-                                width: "100%",
-                                height: "calc(100vh - 56px)",
-                                display: "flex",
+                                flexDirection: "column",
                                 alignItems: "center",
                                 justifyContent: "center",
-                                overflow: "hidden",
-                                padding: isPreviewImage
-                                    ? "24px"
-                                    : "0",
                             }}
-                            onClick={(e) =>
-                                e.stopPropagation()
+                            onClick={() =>
+                                setPreviewAttachment(null)
                             }
                         >
-                            {isPreviewImage ? (
-                                <img
-                                    src={
-                                        previewAttachment.url
-                                    }
-                                    alt={
-                                        previewAttachment.fileName
-                                    }
+                            {/* Header bar */}
+                            <div
+                                style={{
+                                    position: "absolute",
+                                    top: 0,
+                                    left: 0,
+                                    right: 0,
+                                    height: "56px",
+                                    background: "rgba(0,0,0,0.6)",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    padding: "0 20px",
+                                    zIndex: 1,
+                                }}
+                                onClick={(e) =>
+                                    e.stopPropagation()
+                                }
+                            >
+                                <span
                                     style={{
-                                        maxWidth: "100%",
-                                        maxHeight: "100%",
-                                        objectFit: "contain",
-                                        borderRadius: "6px",
-                                        boxShadow:
-                                            "0 8px 40px rgba(0,0,0,0.6)",
-                                    }}
-                                />
-                            ) : isBrowserPreviewable ? (
-                                <iframe
-                                    src={
-                                        previewAttachment.url
-                                    }
-                                    title={
-                                        previewAttachment.fileName
-                                    }
-                                    style={{
-                                        width: "100%",
-                                        height: "100%",
-                                        border: "none",
-                                        background: "#fff",
-                                    }}
-                                />
-                            ) : (
-                                /* Unsupported type – show download prompt */
-                                <div
-                                    style={{
-                                        textAlign: "center",
                                         color: "#e9edef",
-                                        padding: "40px",
+                                        fontSize: "14px",
+                                        fontWeight: 600,
+                                        maxWidth: "60%",
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        whiteSpace: "nowrap",
                                     }}
                                 >
-                                    <div
-                                        style={{
-                                            fontSize: "48px",
-                                            marginBottom: "16px",
-                                        }}
-                                    >
-                                        <FileImageOutlined />
-                                    </div>
-                                    <div
-                                        style={{
-                                            fontSize: "16px",
-                                            fontWeight: 600,
-                                            marginBottom: "8px",
-                                        }}
-                                    >
-                                        {
-                                            previewAttachment.fileName
-                                        }
-                                    </div>
-                                    <div
-                                        style={{
-                                            color: "#aebac1",
-                                            marginBottom: "20px",
-                                        }}
-                                    >
-                                        This file type cannot be
-                                        previewed in the browser.
-                                    </div>
+                                    {previewAttachment.fileName}
+                                </span>
+
+                                <div
+                                    style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "8px",
+                                    }}
+                                >
+                                    {/* Download button in viewer */}
                                     <a
                                         href={
                                             previewAttachment.url
@@ -5585,431 +6140,590 @@ const ChatPage = () => {
                                             previewAttachment.fileName ||
                                             "attachment"
                                         }
-                                        style={{
-                                            display:
-                                                "inline-flex",
-                                            alignItems:
-                                                "center",
-                                            gap: "8px",
-                                            background:
-                                                "#00a884",
-                                            color: "#fff",
-                                            padding:
-                                                "10px 20px",
-                                            borderRadius:
-                                                "8px",
-                                            textDecoration:
-                                                "none",
-                                            fontWeight: 600,
-                                        }}
-                                    >
-                                        <DownloadOutlined />{" "}
-                                        Download File
-                                    </a>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                );
-            })()}
-
-
-            {/* =================================================
-                START NEW CHAT MODAL
-            ================================================= */}
-
-            <Modal
-                title="Start New Chat"
-                open={isModalOpen}
-                onOk={
-                    handleCreateChat
-                }
-                confirmLoading={
-                    creatingChat
-                }
-                okText="Start Chat"
-                cancelText="Cancel"
-                onCancel={() => {
-                    setIsModalOpen(false);
-                    setUserSearch("");
-                    setSelectedUser(null);
-                }}
-            >
-
-                {/* USER SEARCH */}
-
-                <Input
-                    prefix={
-                        <SearchOutlined />
-                    }
-                    placeholder="Search registered users..."
-                    value={
-                        userSearch
-                    }
-                    onChange={(e) =>
-                        setUserSearch(
-                            e.target.value
-                        )
-                    }
-                    allowClear
-                    style={{
-                        marginBottom:
-                            "12px",
-                    }}
-                />
-
-
-                {/* USERS */}
-
-                {loadingUsers ? (
-
-                    <div
-                        style={{
-                            textAlign:
-                                "center",
-                            padding:
-                                "30px",
-                        }}
-                    >
-                        <Spin />
-                    </div>
-
-                ) : (
-
-                    <div
-                        style={{
-                            maxHeight:
-                                "350px",
-                            overflowY:
-                                "auto",
-                            border:
-                                "1px solid #f0f0f0",
-                            borderRadius:
-                                "8px",
-                        }}
-                    >
-
-                        {filteredUsers.map(
-                            (user) => {
-
-                                const isSelected =
-                                    String(
-                                        selectedUser?.id
-                                    ) ===
-                                    String(
-                                        user.id
-                                    );
-
-
-                                return (
-
-                                    <button
-                                        key={
-                                            user.id
+                                        onClick={(e) =>
+                                            e.stopPropagation()
                                         }
+                                        style={{
+                                            color: "#e9edef",
+                                            fontSize: "20px",
+                                            lineHeight: 1,
+                                            padding: "6px 10px",
+                                            borderRadius: "8px",
+                                            background:
+                                                "rgba(255,255,255,0.1)",
+                                            display: "flex",
+                                            alignItems: "center",
+                                        }}
+                                        title="Download"
+                                    >
+                                        <DownloadOutlined />
+                                    </a>
+
+                                    {/* Close button */}
+                                    <button
                                         type="button"
                                         onClick={() =>
-                                            setSelectedUser(
-                                                user
+                                            setPreviewAttachment(
+                                                null
                                             )
                                         }
                                         style={{
-                                            width:
-                                                "100%",
-                                            border:
-                                                "none",
                                             background:
-                                                isSelected
-                                                    ? "#e6f4ff"
-                                                    : "#fff",
-                                            padding:
-                                                "12px",
-                                            display:
-                                                "flex",
-                                            alignItems:
-                                                "center",
-                                            gap:
-                                                "12px",
-                                            cursor:
-                                                "pointer",
-                                            textAlign:
-                                                "left",
-                                            borderBottom:
-                                                "1px solid #f5f5f5",
+                                                "rgba(255,255,255,0.1)",
+                                            border: "none",
+                                            borderRadius: "8px",
+                                            color: "#e9edef",
+                                            cursor: "pointer",
+                                            fontSize: "18px",
+                                            padding: "6px 10px",
+                                            display: "flex",
+                                            alignItems: "center",
+                                        }}
+                                        title="Close (Esc)"
+                                    >
+                                        <CloseOutlined />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Viewer body */}
+                            <div
+                                style={{
+                                    marginTop: "56px",
+                                    width: "100%",
+                                    height: "calc(100vh - 56px)",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    overflow: "hidden",
+                                    padding: isPreviewImage
+                                        ? "24px"
+                                        : "0",
+                                }}
+                                onClick={(e) =>
+                                    e.stopPropagation()
+                                }
+                            >
+                                {isPreviewImage ? (
+                                    <img
+                                        src={
+                                            previewAttachment.url
+                                        }
+                                        alt={
+                                            previewAttachment.fileName
+                                        }
+                                        style={{
+                                            maxWidth: "100%",
+                                            maxHeight: "100%",
+                                            objectFit: "contain",
+                                            borderRadius: "6px",
+                                            boxShadow:
+                                                "0 8px 40px rgba(0,0,0,0.6)",
+                                        }}
+                                    />
+                                ) : isBrowserPreviewable ? (
+                                    <iframe
+                                        src={
+                                            previewAttachment.url
+                                        }
+                                        title={
+                                            previewAttachment.fileName
+                                        }
+                                        style={{
+                                            width: "100%",
+                                            height: "100%",
+                                            border: "none",
+                                            background: "#fff",
+                                        }}
+                                    />
+                                ) : (
+                                    /* Unsupported type – show download prompt */
+                                    <div
+                                        style={{
+                                            textAlign: "center",
+                                            color: "#e9edef",
+                                            padding: "40px",
                                         }}
                                     >
-
-                                        <Avatar
-                                            size={42}
-                                            icon={
-                                                <UserOutlined />
-                                            }
-                                        />
-
-
                                         <div
                                             style={{
-                                                flex:
-                                                    1,
-                                                minWidth:
-                                                    0,
+                                                fontSize: "48px",
+                                                marginBottom: "16px",
+                                            }}
+                                        >
+                                            <FileImageOutlined />
+                                        </div>
+                                        <div
+                                            style={{
+                                                fontSize: "16px",
+                                                fontWeight: 600,
+                                                marginBottom: "8px",
+                                            }}
+                                        >
+                                            {
+                                                previewAttachment.fileName
+                                            }
+                                        </div>
+                                        <div
+                                            style={{
+                                                color: "#aebac1",
+                                                marginBottom: "20px",
+                                            }}
+                                        >
+                                            This file type cannot be
+                                            previewed in the browser.
+                                        </div>
+                                        <a
+                                            href={
+                                                previewAttachment.url
+                                            }
+                                            download={
+                                                previewAttachment.fileName ||
+                                                "attachment"
+                                            }
+                                            style={{
+                                                display:
+                                                    "inline-flex",
+                                                alignItems:
+                                                    "center",
+                                                gap: "8px",
+                                                background:
+                                                    "#00a884",
+                                                color: "#fff",
+                                                padding:
+                                                    "10px 20px",
+                                                borderRadius:
+                                                    "8px",
+                                                textDecoration:
+                                                    "none",
+                                                fontWeight: 600,
+                                            }}
+                                        >
+                                            <DownloadOutlined />{" "}
+                                            Download File
+                                        </a>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    );
+                })()}
+
+
+                {/* =================================================
+                START NEW CHAT MODAL
+            ================================================= */}
+
+                <Modal
+                    title="Start New Chat"
+                    open={isModalOpen}
+                    onOk={
+                        handleCreateChat
+                    }
+                    confirmLoading={
+                        creatingChat
+                    }
+                    okText="Start Chat"
+                    cancelText="Cancel"
+                    onCancel={() => {
+                        setIsModalOpen(false);
+                        setUserSearch("");
+                        setSelectedUser(null);
+                    }}
+                >
+
+                    {/* USER SEARCH */}
+
+                    <Input
+                        prefix={
+                            <SearchOutlined />
+                        }
+                        placeholder="Search registered users..."
+                        value={
+                            userSearch
+                        }
+                        onChange={(e) =>
+                            setUserSearch(
+                                e.target.value
+                            )
+                        }
+                        allowClear
+                        style={{
+                            marginBottom:
+                                "12px",
+                        }}
+                    />
+
+
+                    {/* USERS */}
+
+                    {loadingUsers ? (
+
+                        <div
+                            style={{
+                                textAlign:
+                                    "center",
+                                padding:
+                                    "30px",
+                            }}
+                        >
+                            <Spin />
+                        </div>
+
+                    ) : (
+
+                        <div
+                            style={{
+                                maxHeight:
+                                    "350px",
+                                overflowY:
+                                    "auto",
+                                border: `1px solid ${darkMode ? "#222d34" : "#f0f0f0"
+                                    }`,
+                                borderRadius:
+                                    "8px",
+                            }}
+                        >
+
+                            {filteredUsers.map(
+                                (user) => {
+
+                                    const isSelected =
+                                        String(
+                                            selectedUser?.id
+                                        ) ===
+                                        String(
+                                            user.id
+                                        );
+
+
+                                    return (
+
+                                        <button
+                                            key={
+                                                user.id
+                                            }
+                                            type="button"
+                                            onClick={() =>
+                                                setSelectedUser(
+                                                    user
+                                                )
+                                            }
+                                            style={{
+                                                width:
+                                                    "100%",
+                                                border:
+                                                    "none",
+                                                background:
+                                                    isSelected
+                                                        ? darkMode
+                                                            ? "rgba(0, 168, 132, 0.2)"
+                                                            : "#e6f4ff"
+                                                        : darkMode
+                                                            ? "#111b21"
+                                                            : "#fff",
+                                                padding:
+                                                    "12px",
+                                                display:
+                                                    "flex",
+                                                alignItems:
+                                                    "center",
+                                                gap:
+                                                    "12px",
+                                                cursor:
+                                                    "pointer",
+                                                textAlign:
+                                                    "left",
+                                                borderBottom: `1px solid ${darkMode
+                                                    ? "#222d34"
+                                                    : "#f5f5f5"
+                                                    }`,
                                             }}
                                         >
 
+                                            <Avatar
+                                                size={42}
+                                                icon={
+                                                    <UserOutlined />
+                                                }
+                                            />
+
+
                                             <div
                                                 style={{
-                                                    fontWeight:
-                                                        600,
-                                                    color:
-                                                        "#222",
+                                                    flex:
+                                                        1,
+                                                    minWidth:
+                                                        0,
                                                 }}
                                             >
-                                                {user.username ||
-                                                    user.name ||
-                                                    user.full_name ||
-                                                    `User #${user.id}`}
-                                            </div>
-
-
-                                            {user.email && (
 
                                                 <div
                                                     style={{
-                                                        fontSize:
-                                                            "12px",
-                                                        color:
-                                                            "#888",
-                                                        marginTop:
-                                                            "2px",
+                                                        fontWeight:
+                                                            600,
+                                                        color: darkMode
+                                                            ? "#e9edef"
+                                                            : "#222",
                                                     }}
                                                 >
-                                                    {
-                                                        user.email
-                                                    }
+                                                    {user.username ||
+                                                        user.name ||
+                                                        user.full_name ||
+                                                        `User #${user.id}`}
                                                 </div>
+
+
+                                                {user.email && (
+
+                                                    <div
+                                                        style={{
+                                                            fontSize:
+                                                                "12px",
+                                                            color: darkMode
+                                                                ? "#8696a0"
+                                                                : "#888",
+                                                            marginTop:
+                                                                "2px",
+                                                        }}
+                                                    >
+                                                        {
+                                                            user.email
+                                                        }
+                                                    </div>
+
+                                                )}
+
+                                            </div>
+
+
+                                            {isSelected && (
+
+                                                <CheckOutlined
+                                                    style={{
+                                                        color:
+                                                            "#00a884",
+                                                        fontSize:
+                                                            "18px",
+                                                    }}
+                                                />
 
                                             )}
 
-                                        </div>
-
-
-                                        {isSelected && (
-
-                                            <CheckOutlined
-                                                style={{
-                                                    color:
-                                                        "#1677ff",
-                                                    fontSize:
-                                                        "18px",
-                                                }}
-                                            />
-
-                                        )}
-
-                                    </button>
-                                );
-                            }
-                        )}
-
-
-                        {filteredUsers.length ===
-                            0 && (
-
-                                <div
-                                    style={{
-                                        textAlign:
-                                            "center",
-                                        padding:
-                                            "30px",
-                                        color:
-                                            "#888",
-                                    }}
-                                >
-                                    No registered users found.
-                                </div>
-
+                                        </button>
+                                    );
+                                }
                             )}
 
-                    </div>
 
-                )}
+                            {filteredUsers.length ===
+                                0 && (
+
+                                    <div
+                                        style={{
+                                            textAlign:
+                                                "center",
+                                            padding:
+                                                "30px",
+                                            color: darkMode
+                                                ? "#8696a0"
+                                                : "#888",
+                                        }}
+                                    >
+                                        No registered users found.
+                                    </div>
+
+                                )}
+
+                        </div>
+
+                    )}
 
 
-                {/* SELECTED USER */}
+                    {/* SELECTED USER */}
 
-                {selectedUser && (
+                    {selectedUser && (
 
-                    <div
-                        style={{
-                            marginTop:
-                                "12px",
-                            padding:
-                                "10px",
-                            background:
-                                "#f6ffed",
-                            border:
-                                "1px solid #b7eb8f",
-                            borderRadius:
-                                "8px",
-                        }}
-                    >
-
-                        <span
+                        <div
                             style={{
-                                color:
-                                    "#389e0d",
+                                marginTop:
+                                    "12px",
+                                padding:
+                                    "10px",
+                                background: darkMode
+                                    ? "rgba(0, 168, 132, 0.15)"
+                                    : "#f6ffed",
+                                border: `1px solid ${darkMode
+                                    ? "rgba(0, 168, 132, 0.4)"
+                                    : "#b7eb8f"
+                                    }`,
+                                borderRadius:
+                                    "8px",
                             }}
                         >
-                            Selected:{" "}
-                            <strong>
-                                {selectedUser.username ||
-                                    selectedUser.name ||
-                                    selectedUser.full_name ||
-                                    `User #${selectedUser.id}`}
-                            </strong>
-                        </span>
 
-                    </div>
+                            <span
+                                style={{
+                                    color: darkMode
+                                        ? "#25d366"
+                                        : "#389e0d",
+                                }}
+                            >
+                                Selected:{" "}
+                                <strong>
+                                    {selectedUser.username ||
+                                        selectedUser.name ||
+                                        selectedUser.full_name ||
+                                        `User #${selectedUser.id}`}
+                                </strong>
+                            </span>
 
-                )}
+                        </div>
 
-            </Modal>
+                    )}
 
-            {/* =================================================
+                </Modal>
+
+                {/* =================================================
                 WEBRTC CALL UI
             ================================================= */}
 
-            {/* Incoming Call */}
-            {
-                incomingCall && (
-                    <Modal
-                        open
-                        footer={null}
-                        closable={false}
-                        centered
-                    >
-                        <IncomingCall
-                            callType={incomingCall.callType}
-                            onAccept={acceptIncomingCall}
-                            onReject={rejectIncomingCall}
-                        />
-                    </Modal>
-                )
-            }
+                {/* Incoming Call */}
+                {
+                    incomingCall && (
+                        <Modal
+                            open
+                            footer={null}
+                            closable={false}
+                            centered
+                            style={{ maxWidth: "92vw" }}
+                        >
+                            <IncomingCall
+                                callType={incomingCall.callType}
+                                onAccept={acceptIncomingCall}
+                                onReject={rejectIncomingCall}
+                            />
+                        </Modal>
+                    )
+                }
 
-            {/* Outgoing Call */}
-            {
-                outgoingCall && (
-                    <Modal
-                        open
-                        footer={null}
-                        closable={false}
-                        centered
-                    >
-                        <OutgoingCall
-                            callType={outgoingCall.callType}
-                            onCancel={() =>
-                                endCurrentCall(true)
-                            }
-                        />
-                    </Modal>
-                )
-            }
+                {/* Outgoing Call */}
+                {
+                    outgoingCall && (
+                        <Modal
+                            open
+                            footer={null}
+                            closable={false}
+                            centered
+                            style={{ maxWidth: "92vw" }}
+                        >
+                            <OutgoingCall
+                                callType={outgoingCall.callType}
+                                onCancel={() =>
+                                    endCurrentCall(true)
+                                }
+                            />
+                        </Modal>
+                    )
+                }
 
-            {/* Active Audio Call */}
-            {
-                activeCall &&
-                callType === "audio" && (
-                    <Modal
-                        open
-                        footer={null}
-                        closable={false}
-                        centered
-                        width={420}
-                    >
-                        <AudioCall
-                            remoteStream={remoteStream}
-                            microphoneEnabled={
-                                microphoneEnabled
-                            }
-                            cameraEnabled={
-                                cameraEnabled
-                            }
-                            onToggleMicrophone={() => {
-                                const next =
-                                    !microphoneEnabled;
+                {/* Active Audio Call */}
+                {
+                    activeCall &&
+                    callType === "audio" && (
+                        <Modal
+                            open
+                            footer={null}
+                            closable={false}
+                            centered
+                            width={420}
+                            style={{ maxWidth: "92vw" }}
+                        >
+                            <AudioCall
+                                remoteStream={remoteStream}
+                                microphoneEnabled={
+                                    microphoneEnabled
+                                }
+                                cameraEnabled={
+                                    cameraEnabled
+                                }
+                                onToggleMicrophone={() => {
+                                    const next =
+                                        !microphoneEnabled;
 
-                                callService.toggleMicrophone(
-                                    next
-                                );
+                                    callService.toggleMicrophone(
+                                        next
+                                    );
 
-                                setMicrophoneEnabled(
-                                    next
-                                );
-                            }}
-                            onEnd={() =>
-                                endCurrentCall(true)
-                            }
+                                    setMicrophoneEnabled(
+                                        next
+                                    );
+                                }}
+                                onEnd={() =>
+                                    endCurrentCall(true)
+                                }
 
-                            callDuration={callDuration}
-                        />
-                    </Modal>
-                )
-            }
+                                callDuration={callDuration}
+                            />
+                        </Modal>
+                    )
+                }
 
-            {/* Active Video Call */}
-            {
-                activeCall &&
-                callType === "video" && (
-                    <Modal
-                        open
-                        footer={null}
-                        closable={false}
-                        centered
-                        width={850}
-                    >
-                        <VideoCall
-                            localStream={localStream}
-                            remoteStream={remoteStream}
-                            microphoneEnabled={
-                                microphoneEnabled
-                            }
-                            cameraEnabled={
-                                cameraEnabled
-                            }
-                            onToggleMicrophone={() => {
-                                const next =
-                                    !microphoneEnabled;
+                {/* Active Video Call */}
+                {
+                    activeCall &&
+                    callType === "video" && (
+                        <Modal
+                            open
+                            footer={null}
+                            closable={false}
+                            centered
+                            width={850}
+                            style={{ maxWidth: "95vw" }}
+                        >
+                            <VideoCall
+                                localStream={localStream}
+                                remoteStream={remoteStream}
+                                microphoneEnabled={
+                                    microphoneEnabled
+                                }
+                                cameraEnabled={
+                                    cameraEnabled
+                                }
+                                onToggleMicrophone={() => {
+                                    const next =
+                                        !microphoneEnabled;
 
-                                callService.toggleMicrophone(
-                                    next
-                                );
+                                    callService.toggleMicrophone(
+                                        next
+                                    );
 
-                                setMicrophoneEnabled(
-                                    next
-                                );
-                            }}
-                            onToggleCamera={() => {
-                                const next =
-                                    !cameraEnabled;
+                                    setMicrophoneEnabled(
+                                        next
+                                    );
+                                }}
+                                onToggleCamera={() => {
+                                    const next =
+                                        !cameraEnabled;
 
-                                callService.toggleCamera(
-                                    next
-                                );
+                                    callService.toggleCamera(
+                                        next
+                                    );
 
-                                setCameraEnabled(
-                                    next
-                                );
-                            }}
-                            onEnd={() =>
-                                endCurrentCall(true)
-                            }
-                            callDuration={callDuration}
-                        />
-                    </Modal>
-                )
-            }
-        </div>
+                                    setCameraEnabled(
+                                        next
+                                    );
+                                }}
+                                onEnd={() =>
+                                    endCurrentCall(true)
+                                }
+                                callDuration={callDuration}
+                            />
+                        </Modal>
+                    )
+                }
+            </div>
+        </ConfigProvider>
     );
 };
 

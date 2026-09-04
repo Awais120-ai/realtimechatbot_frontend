@@ -2,11 +2,11 @@ import {
     AudioOutlined,
     AudioMutedOutlined,
     CameraOutlined,
-    CameraOutlined as CameraOffOutlined,
     PhoneFilled,
 } from "@ant-design/icons";
 
-import { Button, Space } from "antd";
+import { Button } from "antd";
+import styles from "./CallControls.module.css";
 
 const CallControls = ({
     microphoneEnabled,
@@ -16,10 +16,15 @@ const CallControls = ({
     onToggleCamera,
     onEnd,
 }) => {
+    const isVideo = callType === "video";
+
     return (
-        <Space size="middle">
+        <div className={`${styles.controlsContainer} ${isVideo ? "videoCallControls" : ""}`}>
             <Button
                 shape="circle"
+                className={`${styles.controlBtn} ${!isVideo ? styles.controlBtnLight : ""} ${
+                    !microphoneEnabled ? styles.mutedBtn : ""
+                }`}
                 icon={
                     microphoneEnabled ? (
                         <AudioOutlined />
@@ -28,15 +33,18 @@ const CallControls = ({
                     )
                 }
                 onClick={onToggleMicrophone}
+                aria-label={microphoneEnabled ? "Mute microphone" : "Unmute microphone"}
             />
 
             {callType === "video" && (
                 <Button
                     shape="circle"
-                    icon={
-                        <CameraOutlined />
-                    }
+                    className={`${styles.controlBtn} ${
+                        !cameraEnabled ? styles.mutedBtn : ""
+                    }`}
+                    icon={<CameraOutlined />}
                     onClick={onToggleCamera}
+                    aria-label={cameraEnabled ? "Turn off camera" : "Turn on camera"}
                 />
             )}
 
@@ -44,10 +52,12 @@ const CallControls = ({
                 danger
                 type="primary"
                 shape="circle"
-                icon={<PhoneFilled />}
+                className={styles.endBtn}
+                icon={<PhoneFilled style={{ transform: "rotate(135deg)" }} />}
                 onClick={onEnd}
+                aria-label="End call"
             />
-        </Space>
+        </div>
     );
 };
 

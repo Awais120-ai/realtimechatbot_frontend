@@ -1,6 +1,8 @@
 import { getAccessToken } from "./token.service";
 
-const WS_BASE_URL = "/api/v1/ws";
+const WS_BASE_URL =
+    import.meta.env.VITE_WS_URL ||
+    "ws://192.168.18.83:8001/api/v1/ws";
 
 /**
  * Create Native WebSocket connection
@@ -304,7 +306,8 @@ export const sendCallEnd = (
     targetUserId,
     conversationId,
     duration = 0,
-    callType = "audio"
+    callType = "audio",
+    callInitiatorId = null
 ) => {
     if (
         !websocket ||
@@ -320,6 +323,10 @@ export const sendCallEnd = (
             conversation_id: Number(conversationId),
             duration: Number(duration) || 0,
             call_type: callType || "audio",
+            call_initiator_id:
+                callInitiatorId != null
+                    ? Number(callInitiatorId)
+                    : null,
         })
     );
 };

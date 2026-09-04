@@ -1,0 +1,24 @@
+/* Custom Scrollbar Styles */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--wa-scrollbar-track, transparent);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--wa-scrollbar-thumb, rgba(11, 20, 26, 0.2));
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--wa-scrollbar-thumb-hover, rgba(11, 20, 26, 0.35));
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--wa-scrollbar-thumb, rgba(11, 20, 26, 0.2)) var(--wa-scrollbar-track, transparent);
+}

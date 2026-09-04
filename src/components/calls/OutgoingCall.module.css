@@ -1,0 +1,65 @@
+.container {
+    padding: 32px 24px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: var(--wa-bg-modal, #ffffff);
+    color: var(--wa-text-primary, #111b21);
+    border-radius: 12px;
+}
+
+.avatarPulse {
+    position: relative;
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 168, 132, 0.12);
+    color: var(--wa-primary, #00a884);
+    font-size: 32px;
+    animation: outgoingPulse 2s infinite ease-in-out;
+}
+
+@keyframes outgoingPulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(0, 168, 132, 0.4);
+    }
+    70% {
+        box-shadow: 0 0 0 16px rgba(0, 168, 132, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(0, 168, 132, 0);
+    }
+}
+
+.title {
+    margin: 0 0 6px;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--wa-text-primary, #111b21);
+}
+
+.receiver {
+    margin: 0 0 24px;
+    font-size: 15px;
+    color: var(--wa-text-secondary, #667781);
+    max-width: 280px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cancelBtn {
+    height: 44px !important;
+    padding: 0 28px !important;
+    border-radius: 22px !important;
+    font-weight: 600 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+}

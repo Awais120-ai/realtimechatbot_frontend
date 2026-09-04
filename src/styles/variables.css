@@ -1,0 +1,120 @@
+:root {
+  /* WhatsApp Light Theme Tokens */
+  --wa-bg-app: #efeae2;
+  --wa-bg-chat: #efeae2;
+  --wa-bg-sidebar: #ffffff;
+  --wa-bg-header: #f0f2f5;
+  --wa-bg-input: #ffffff;
+  --wa-bg-input-bar: #f0f2f5;
+  --wa-bg-search: #f0f2f5;
+  --wa-bg-card: #ffffff;
+  --wa-bg-hover: #f5f6f6;
+  --wa-bg-active: #f0f2f5;
+  --wa-bg-selected: #f0f2f5;
+  --wa-bg-modal: #ffffff;
+  --wa-bg-popup: #ffffff;
+
+  /* Messages */
+  --wa-msg-own: #d9fdd3;
+  --wa-msg-other: #ffffff;
+  --wa-msg-text: #111b21;
+  --wa-msg-time: #667781;
+  --wa-msg-status: #8696a0;
+  --wa-msg-status-read: #53bdeb;
+
+  /* Text colors */
+  --wa-text-primary: #111b21;
+  --wa-text-secondary: #667781;
+  --wa-text-muted: #8696a0;
+  --wa-text-heading: #111b21;
+  --wa-text-link: #027eb5;
+
+  /* Borders & Dividers */
+  --wa-border-primary: #e9edef;
+  --wa-border-subtle: #f0f2f5;
+  --wa-border-divider: #f5f6f6;
+
+  /* Brand / Accents */
+  --wa-primary: #00a884;
+  --wa-primary-hover: #008069;
+  --wa-primary-active: #00705a;
+  --wa-primary-light: rgba(0, 168, 132, 0.1);
+  --wa-primary-border: rgba(0, 168, 132, 0.3);
+  --wa-danger: #ea0038;
+  --wa-danger-hover: #d30032;
+  --wa-online: #25d366;
+  --wa-offline: #8696a0;
+
+  /* Shadows */
+  --wa-shadow-sm: 0 1px 0.5px rgba(11, 20, 26, 0.13);
+  --wa-shadow-md: 0 4px 12px rgba(11, 20, 26, 0.1);
+  --wa-shadow-lg: 0 8px 30px rgba(11, 20, 26, 0.15);
+
+  /* Scrollbar */
+  --wa-scrollbar-track: transparent;
+  --wa-scrollbar-thumb: rgba(11, 20, 26, 0.2);
+  --wa-scrollbar-thumb-hover: rgba(11, 20, 26, 0.35);
+}
+
+/* Dark Mode Tokens */
+.darkMode,
+:global(.darkMode),
+[data-theme="dark"],
+.dark-mode,
+:global(.dark-mode) {
+  /* WhatsApp Dark Theme Tokens */
+  --wa-bg-app: #0b141a;
+  --wa-bg-chat: #0b141a;
+  --wa-bg-sidebar: #111b21;
+  --wa-bg-header: #202c33;
+  --wa-bg-input: #2a3942;
+  --wa-bg-input-bar: #202c33;
+  --wa-bg-search: #202c33;
+  --wa-bg-card: #111b21;
+  --wa-bg-hover: #202c33;
+  --wa-bg-active: #2a3942;
+  --wa-bg-selected: #2a3942;
+  --wa-bg-modal: #202c33;
+  --wa-bg-popup: #202c33;
+
+  /* Messages */
+  --wa-msg-own: #005c4b;
+  --wa-msg-other: #202c33;
+  --wa-msg-text: #e9edef;
+  --wa-msg-time: rgba(233, 237, 239, 0.6);
+  --wa-msg-status: #8696a0;
+  --wa-msg-status-read: #53bdeb;
+
+  /* Text colors */
+  --wa-text-primary: #e9edef;
+  --wa-text-secondary: #8696a0;
+  --wa-text-muted: #667781;
+  --wa-text-heading: #e9edef;
+  --wa-text-link: #53bdeb;
+
+  /* Borders & Dividers */
+  --wa-border-primary: #222d34;
+  --wa-border-subtle: #222d34;
+  --wa-border-divider: #1f2c34;
+
+  /* Brand / Accents */
+  --wa-primary: #00a884;
+  --wa-primary-hover: #008069;
+  --wa-primary-active: #00a884;
+  --wa-primary-light: rgba(0, 168, 132, 0.15);
+  --wa-primary-border: rgba(0, 168, 132, 0.4);
+  --wa-danger: #ea0038;
+  --wa-danger-hover: #d30032;
+  --wa-online: #25d366;
+  --wa-offline: #8696a0;
+
+  /* Shadows */
+  --wa-shadow-sm: 0 1px 0.5px rgba(0, 0, 0, 0.3);
+  --wa-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
+  --wa-shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.5);
+
+  /* Scrollbar */
+  --wa-scrollbar-track: transparent;
+  --wa-scrollbar-thumb: rgba(233, 237, 239, 0.16);
+  --wa-scrollbar-thumb-hover: rgba(233, 237, 239, 0.28);
+}

@@ -4,6 +4,7 @@ import {
 } from "@ant-design/icons";
 
 import { Button } from "antd";
+import styles from "./OutgoingCall.module.css";
 
 const OutgoingCall = ({
     callType,
@@ -11,40 +12,41 @@ const OutgoingCall = ({
     onCancel,
 }) => {
     return (
-        <div
-            style={{
-                padding: 30,
-                textAlign: "center",
-            }}
-        >
-            <h2>
+        <div className={styles.container}>
+            <div className={styles.avatarPulse}>
+                {callType === "video" ? (
+                    <VideoCameraFilled />
+                ) : (
+                    <PhoneFilled />
+                )}
+            </div>
+
+            <h2 className={styles.title}>
                 {callType === "video"
                     ? "Video"
                     : "Audio"}{" "}
                 Call
             </h2>
 
-            <p>
+            <p className={styles.receiver}>
                 Calling{" "}
-                {receiverName ||
-                    "user"}...
+                {receiverName || "user"}...
             </p>
 
             <Button
                 danger
+                type="primary"
+                className={styles.cancelBtn}
                 icon={
-                    callType ===
-                        "video"
-                        ? (
-                            <VideoCameraFilled />
-                        )
-                        : (
-                            <PhoneFilled />
-                        )
+                    callType === "video" ? (
+                        <VideoCameraFilled />
+                    ) : (
+                        <PhoneFilled />
+                    )
                 }
                 onClick={onCancel}
             >
-                Cancel
+                Cancel Call
             </Button>
         </div>
     );

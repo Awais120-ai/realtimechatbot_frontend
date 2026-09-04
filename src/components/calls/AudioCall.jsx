@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
-
+import { PhoneFilled } from "@ant-design/icons";
 import CallControls from "./CallControls";
+import styles from "./AudioCall.module.css";
 
 const AudioCall = ({
     remoteStream,
@@ -23,31 +24,24 @@ const AudioCall = ({
     }, [remoteStream]);
 
     return (
-        <div
-            style={{
-                padding: "32px",
-                textAlign: "center",
-            }}
-        >
+        <div className={styles.container}>
             <audio
                 ref={audioRef}
                 autoPlay
                 playsInline
             />
 
-            <h3>Audio Call</h3>
+            <div className={styles.avatarPulse}>
+                <PhoneFilled />
+            </div>
 
-            <p>
+            <h3 className={styles.title}>Audio Call</h3>
+
+            <p className={styles.status}>
                 Voice call is connected.
             </p>
 
-            <p
-                style={{
-                    fontSize: "18px",
-                    fontWeight: "600",
-                    marginTop: "8px",
-                }}
-            >
+            <p className={styles.duration}>
                 {Math.floor(callDuration / 60)
                     .toString()
                     .padStart(2, "0")}
@@ -57,22 +51,24 @@ const AudioCall = ({
                     .padStart(2, "0")}
             </p>
 
-            <CallControls
-                microphoneEnabled={
-                    microphoneEnabled
-                }
-                cameraEnabled={
-                    cameraEnabled
-                }
-                callType="audio"
-                onToggleMicrophone={
-                    onToggleMicrophone
-                }
-                onToggleCamera={
-                    onToggleCamera
-                }
-                onEnd={onEnd}
-            />
+            <div className={styles.controlsWrapper}>
+                <CallControls
+                    microphoneEnabled={
+                        microphoneEnabled
+                    }
+                    cameraEnabled={
+                        cameraEnabled
+                    }
+                    callType="audio"
+                    onToggleMicrophone={
+                        onToggleMicrophone
+                    }
+                    onToggleCamera={
+                        onToggleCamera
+                    }
+                    onEnd={onEnd}
+                />
+            </div>
         </div>
     );
 };

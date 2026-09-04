@@ -1,0 +1,66 @@
+.container {
+    padding: 32px 24px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: var(--wa-bg-modal, #ffffff);
+    color: var(--wa-text-primary, #111b21);
+    border-radius: 12px;
+}
+
+.avatarPulse {
+    position: relative;
+    width: 84px;
+    height: 84px;
+    border-radius: 50%;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 168, 132, 0.1);
+    color: var(--wa-primary, #00a884);
+    font-size: 36px;
+    animation: pulse 2s infinite ease-in-out;
+}
+
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(0, 168, 132, 0.4);
+    }
+    70% {
+        box-shadow: 0 0 0 16px rgba(0, 168, 132, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(0, 168, 132, 0);
+    }
+}
+
+.title {
+    margin: 0 0 6px;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--wa-text-primary, #111b21);
+}
+
+.status {
+    margin: 0 0 8px;
+    font-size: 14px;
+    color: var(--wa-text-secondary, #667781);
+}
+
+.duration {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--wa-primary, #00a884);
+    margin: 4px 0 24px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.5px;
+}
+
+.controlsWrapper {
+    display: flex;
+    justify-content: center;
+    margin-top: 8px;
+}

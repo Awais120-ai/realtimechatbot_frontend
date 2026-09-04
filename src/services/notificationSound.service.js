@@ -6,8 +6,9 @@ const SOUND_OPTIONS = {
     notification: "/sound/faah-notification.mp3",
     message: "/sound/message-notification.mp3",
     whatsapp: "/sound/bell-notification.wav",
-    cartoon: "/sound/cartoon-character-sneezee.wav",
-    Crowd: "/sound/crowd-laugh.wav"
+    cartoon: "/sound/cartoon-character-sneeze.wav",
+    Crowd: "/sound/crowd-laugh.wav",
+    paresh: "/sound/uthale-re-baba.mp3"
 };
 
 let messageAudio = null;

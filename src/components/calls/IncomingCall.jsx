@@ -3,7 +3,8 @@ import {
     VideoCameraFilled,
 } from "@ant-design/icons";
 
-import { Button, Space } from "antd";
+import { Button } from "antd";
+import styles from "./IncomingCall.module.css";
 
 const IncomingCall = ({
     callType,
@@ -12,13 +13,16 @@ const IncomingCall = ({
     onReject,
 }) => {
     return (
-        <div
-            style={{
-                padding: 30,
-                textAlign: "center",
-            }}
-        >
-            <h2>
+        <div className={styles.container}>
+            <div className={styles.avatarPulse}>
+                {callType === "video" ? (
+                    <VideoCameraFilled />
+                ) : (
+                    <PhoneFilled />
+                )}
+            </div>
+
+            <h2 className={styles.title}>
                 Incoming{" "}
                 {callType === "video"
                     ? "Video"
@@ -26,15 +30,14 @@ const IncomingCall = ({
                 Call
             </h2>
 
-            <p>
-                {callerName ||
-                    "Someone"}{" "}
-                is calling you...
+            <p className={styles.caller}>
+                {callerName || "Someone"} is calling you...
             </p>
 
-            <Space>
+            <div className={styles.actions}>
                 <Button
                     danger
+                    className={styles.rejectBtn}
                     onClick={onReject}
                 >
                     Reject
@@ -42,21 +45,19 @@ const IncomingCall = ({
 
                 <Button
                     type="primary"
+                    className={styles.acceptBtn}
                     icon={
-                        callType ===
-                            "video"
-                            ? (
-                                <VideoCameraFilled />
-                            )
-                            : (
-                                <PhoneFilled />
-                            )
+                        callType === "video" ? (
+                            <VideoCameraFilled />
+                        ) : (
+                            <PhoneFilled />
+                        )
                     }
                     onClick={onAccept}
                 >
                     Accept
                 </Button>
-            </Space>
+            </div>
         </div>
     );
 };

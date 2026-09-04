@@ -1,0 +1,64 @@
+.controlsContainer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+}
+
+.controlBtn {
+    width: 50px !important;
+    height: 50px !important;
+    border-radius: 50% !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 18px !important;
+    background: rgba(255, 255, 255, 0.15) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+    transition: all 0.2s ease !important;
+}
+
+.controlBtn:hover {
+    background: rgba(255, 255, 255, 0.25) !important;
+    transform: scale(1.06) !important;
+}
+
+.mutedBtn {
+    background: rgba(234, 0, 56, 0.2) !important;
+    border-color: rgba(234, 0, 56, 0.4) !important;
+    color: #ff4d4f !important;
+}
+
+.endBtn {
+    width: 54px !important;
+    height: 54px !important;
+    border-radius: 50% !important;
+    background-color: var(--wa-danger, #ea0038) !important;
+    border-color: var(--wa-danger, #ea0038) !important;
+    color: #ffffff !important;
+    font-size: 20px !important;
+    box-shadow: 0 4px 16px rgba(234, 0, 56, 0.4) !important;
+    transition: all 0.2s ease !important;
+}
+
+.endBtn:hover {
+    background-color: #d30032 !important;
+    border-color: #d30032 !important;
+    transform: scale(1.08) !important;
+    box-shadow: 0 6px 20px rgba(234, 0, 56, 0.5) !important;
+}
+
+/* Light mode overrides if used in audio call dialog */
+:global(:not(.videoCallControls)) .controlBtnLight {
+    background: var(--wa-bg-input, #f0f2f5) !important;
+    border: 1px solid var(--wa-border-primary, #e9edef) !important;
+    color: var(--wa-text-primary, #111b21) !important;
+}
+
+:global(:not(.videoCallControls)) .controlBtnLight:hover {
+    background: var(--wa-bg-hover, #e9edef) !important;
+}
