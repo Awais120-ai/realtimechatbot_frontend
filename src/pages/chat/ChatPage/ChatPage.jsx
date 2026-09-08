@@ -70,6 +70,8 @@ import {
     getUsers,
     uploadChatFile,
     clearChatSession,
+    getChatNotificationSettings,
+    setChatNotificationSettings,
 } from "../../../api/chat.api";
 
 import {
@@ -1306,14 +1308,18 @@ const ChatPage = () => {
        NOTIFICATIONS
     ======================================================== */
 
-    const [notifications, setNotifications] = useState([]);
-    const [notificationCount, setNotificationCount] =
-        useState(0);
+    const [
+        chatNotificationsEnabled,
+        setChatNotificationsEnabled,
+    ] = useState(true);
 
-    const [notificationOpen, setNotificationOpen] =
-        useState(false);
+    const [
+        chatNotificationLoading,
+        setChatNotificationLoading,
+    ] = useState(false);
 
     const [incomingToast, setIncomingToast] = useState(null);
+    const [notificationCount, setNotificationCount] = useState(0);
     const toastTimeoutRef = useRef(null);
 
     const showIncomingNotificationToast = (notification) => {
@@ -1530,113 +1536,108 @@ const ChatPage = () => {
     }, [selectedContact?.id]);
 
 
-
     /* ========================================================
-   AUTO MARK OPEN CHAT NOTIFICATIONS AS READ
-   ======================================================== */
+   LOAD CHAT NOTIFICATION SETTING
+======================================================== */
 
     useEffect(() => {
-        const activeConversationId =
-            selectedContact?.id;
+        const conversationId = selectedContact?.id;
 
-        if (
-            !activeConversationId ||
-            !Array.isArray(notifications) ||
-            notifications.length === 0
-        ) {
-            return;
-        }
-
-        const unreadNotifications =
-            notifications.filter((notification) => {
-                if (notification.is_read) {
-                    return false;
-                }
-
-                const notificationConversationId =
-                    getNotificationConversationId(
-                        notification
-                    );
-
-                return (
-                    String(notificationConversationId) ===
-                    String(activeConversationId)
-                );
-            });
-
-        if (unreadNotifications.length === 0) {
+        if (!conversationId) {
+            setChatNotificationsEnabled(true);
             return;
         }
 
         let cancelled = false;
 
-        const markOpenChatNotificationsRead =
-            async () => {
-                try {
-                    const {
-                        markNotificationAsRead,
-                    } = await import(
-                        "../../../api/notification.api"
+        const loadChatNotificationSettings = async () => {
+            try {
+                setChatNotificationLoading(true);
+
+                const data =
+                    await getChatNotificationSettings(
+                        conversationId
                     );
 
-                    const notificationIds =
-                        unreadNotifications.map(
-                            (notification) =>
-                                notification.id
-                        );
+                if (cancelled) {
+                    return;
+                }
 
-                    await Promise.all(
-                        unreadNotifications.map(
-                            (notification) =>
-                                markNotificationAsRead(
-                                    notification.id
-                                )
-                        )
-                    );
-
-                    if (cancelled) {
-                        return;
-                    }
-
-                    /*
-                     * Notification list ko locally read mark karo
-                     */
-                    setNotifications((prev) =>
-                        prev.filter(
-                            (notification) =>
-                                !notificationIds.includes(
-                                    notification.id
-                                )
-                        )
-                    );
-
-                    /*
-                     * Bell counter ko instantly decrease karo
-                     */
-                    setNotificationCount((prev) =>
-                        Math.max(
-                            0,
-                            prev -
-                            unreadNotifications.length
-                        )
-                    );
-                } catch (error) {
+                setChatNotificationsEnabled(
+                    data?.notifications_enabled !== false
+                );
+            } catch (error) {
+                if (!cancelled) {
                     console.error(
-                        "Failed to auto-mark open chat notifications as read:",
+                        "Failed to load chat notification settings:",
                         error
                     );
-                }
-            };
 
-        markOpenChatNotificationsRead();
+                    // Safe default
+                    setChatNotificationsEnabled(true);
+                }
+            } finally {
+                if (!cancelled) {
+                    setChatNotificationLoading(false);
+                }
+            }
+        };
+
+        loadChatNotificationSettings();
 
         return () => {
             cancelled = true;
         };
-    }, [
-        selectedContact?.id,
-        notifications,
-    ]);
+    }, [selectedContact?.id]);
+
+
+    const handleToggleChatNotifications = async () => {
+        if (!selectedContact?.id || chatNotificationLoading) {
+            return;
+        }
+
+        const nextValue = !chatNotificationsEnabled;
+
+        try {
+            setChatNotificationLoading(true);
+
+            const data = await setChatNotificationSettings(
+                selectedContact.id,
+                nextValue
+            );
+
+            const enabled =
+                data?.notifications_enabled === true;
+
+            setChatNotificationsEnabled(enabled);
+
+            // If notifications are turned OFF,
+            // remove the currently visible toast.
+            if (!enabled) {
+                handleDismissToast();
+            }
+
+            antMessage.success(
+                enabled
+                    ? "Notifications turned on."
+                    : "Notifications turned off."
+            );
+        } catch (error) {
+            console.error(
+                "Failed to update chat notification settings:",
+                error
+            );
+
+            antMessage.error(
+                "Failed to update notification setting."
+            );
+        } finally {
+            setChatNotificationLoading(false);
+        }
+    };
+
+
+
 
     /* ========================================================
        AUTO SCROLL
@@ -1890,53 +1891,6 @@ const ChatPage = () => {
 
 
 
-    /* ========================================================
-       LOAD NOTIFICATIONS
-    ======================================================== */
-
-    useEffect(() => {
-        const loadNotifications = async () => {
-            try {
-                const {
-                    getNotifications,
-                    getUnreadNotificationCount,
-                } = await import(
-                    "../../../api/notification.api"
-                );
-
-                const [
-                    notificationList,
-                    unreadData,
-                ] = await Promise.all([
-                    getNotifications({
-                        limit: 50,
-                    }),
-                    getUnreadNotificationCount(),
-                ]);
-
-                setNotifications(
-                    Array.isArray(
-                        notificationList
-                    )
-                        ? notificationList
-                        : []
-                );
-
-                setNotificationCount(
-                    unreadData?.unread_count || 0
-                );
-            } catch (error) {
-                console.error(
-                    "Failed to load notifications:",
-                    error
-                );
-            }
-        };
-
-        if (token) {
-            loadNotifications();
-        }
-    }, [token]);
 
 
     /* ========================================================
@@ -2645,121 +2599,109 @@ const ChatPage = () => {
                     ================================================= */
 
                     if (data?.type === "new_notification") {
-
                         const notification = data?.notification;
 
-                        // Safety check
                         if (!notification) {
                             return;
                         }
 
-                        /* ---------------------------------------------
-                           PLAY NOTIFICATION SOUND
-                        --------------------------------------------- */
-
-                        playMessageNotificationSound();
-
-                        /* ---------------------------------------------
-                           ADD NOTIFICATION
-                        --------------------------------------------- */
-
-                        setNotifications((prev) => [
-                            notification,
-                            ...prev,
-                        ]);
-
-                        /* ---------------------------------------------
-                           UPDATE UNREAD NOTIFICATION COUNT
-                        --------------------------------------------- */
-
+                        // Increase unread notification count
                         if (!notification.is_read) {
                             setNotificationCount((prev) => prev + 1);
                         }
 
-                        /* ---------------------------------------------
-                           IN-APP NOTIFICATION
-                        --------------------------------------------- */
-
+                        // Show in-app notification
                         showIncomingNotificationToast(notification);
 
-                        /* ---------------------------------------------
-                           BROWSER NOTIFICATION
-                        --------------------------------------------- */
+                        // Play notification sound
+                        playMessageNotificationSound();
 
-
-
+                        // Show browser notification
                         if (
                             "Notification" in window &&
                             Notification.permission === "granted"
                         ) {
-                            const browserNotification = new Notification(
-                                notification.title || "New message",
-                                {
-                                    body:
-                                        notification.body
-                                            ? `${String(notification.body).slice(0, 15)}...`
-                                            : "You have a new message.",
-                                }
-                            );
+                            try {
+                                const browserNotification =
+                                    new Notification(
+                                        notification.title || "New message",
+                                        {
+                                            body: notification.body
+                                                ? String(notification.body).slice(0, 80)
+                                                : "You have a new message.",
 
-                            browserNotification.onclick = async () => {
-                                window.focus();
+                                            tag:
+                                                `chat-message-${notification.id || Date.now()}`,
 
-                                const conversationId =
-                                    getNotificationConversationId(
-                                        notification
+                                            renotify: true,
+                                        }
                                     );
 
-                                if (!conversationId) {
-                                    return;
-                                }
+                                browserNotification.onclick = async () => {
+                                    window.focus();
 
-                                try {
-                                    let conversation =
-                                        conversations.find(
-                                            (item) =>
-                                                String(item.id) ===
-                                                String(conversationId)
+                                    const conversationId =
+                                        getNotificationConversationId(
+                                            notification
                                         );
 
-                                    if (!conversation) {
-                                        const refreshed =
-                                            await fetchConversations();
+                                    if (!conversationId) {
+                                        browserNotification.close();
+                                        return;
+                                    }
 
-                                        conversation =
-                                            refreshed.find(
+                                    try {
+                                        let conversation =
+                                            conversations.find(
                                                 (item) =>
                                                     String(item.id) ===
                                                     String(conversationId)
                                             );
-                                    }
 
-                                    if (conversation) {
-                                        setSelectedContact(
-                                            conversation
+                                        // If conversation isn't currently loaded,
+                                        // refresh conversations.
+                                        if (!conversation) {
+                                            const refreshed =
+                                                await fetchConversations();
+
+                                            conversation =
+                                                refreshed.find(
+                                                    (item) =>
+                                                        String(item.id) ===
+                                                        String(conversationId)
+                                                );
+                                        }
+
+                                        if (conversation) {
+                                            setSelectedContact(conversation);
+
+                                            setConversations((prev) =>
+                                                prev.map((item) =>
+                                                    String(item.id) ===
+                                                        String(conversationId)
+                                                        ? {
+                                                            ...item,
+                                                            unread_count: 0,
+                                                        }
+                                                        : item
+                                                )
+                                            );
+                                        }
+
+                                        browserNotification.close();
+                                    } catch (error) {
+                                        console.error(
+                                            "Failed to open notification conversation:",
+                                            error
                                         );
-
-                                        setConversations((prev) =>
-                                            prev.map((item) =>
-                                                String(item.id) ===
-                                                    String(conversationId)
-                                                    ? {
-                                                        ...item,
-                                                        unread_count: 0,
-                                                    }
-                                                    : item
-                                            )
-                                        );
                                     }
-
-                                    browserNotification.close();
-                                } catch (error) {
-                                    console.error(
-                                        "Failed to open notification conversation:",
-                                        error
-                                    );
-                                }
-                            };
+                                };
+                            } catch (error) {
+                                console.error(
+                                    "Failed to show browser notification:",
+                                    error
+                                );
+                            }
                         }
 
                         return;
@@ -3571,9 +3513,6 @@ const ChatPage = () => {
                     // Exit edit mode if active
                     setEditingMessageId(null);
                     setMessageText("");
-
-                    // Close notification popup if open
-                    setNotificationOpen(false);
 
                     antMessage.success(
                         "Chat cleared successfully."
@@ -4662,57 +4601,7 @@ const ChatPage = () => {
 
                                 </div>
 
-
-                                <Button
-                                    type="text"
-                                    icon={<PhoneOutlined />}
-                                    aria-label="Audio call"
-                                    onClick={() => {
-                                        const targetUserId =
-                                            selectedContact?.other_user?.id;
-
-                                        if (!targetUserId) {
-                                            antMessage.error(
-                                                "User information is missing."
-                                            );
-
-                                            return;
-                                        }
-
-                                        startOutgoingCall(
-                                            targetUserId,
-                                            selectedContact.id,
-                                            "audio"
-                                        );
-                                    }}
-                                />
-
-                                <Button
-                                    type="text"
-                                    icon={<VideoCameraOutlined />}
-                                    aria-label="Video call"
-                                    onClick={() => {
-                                        const targetUserId =
-                                            selectedContact?.other_user?.id;
-
-                                        if (!targetUserId) {
-                                            antMessage.error(
-                                                "User information is missing."
-                                            );
-
-                                            return;
-                                        }
-
-                                        startOutgoingCall(
-                                            targetUserId,
-                                            selectedContact.id,
-                                            "video"
-                                        );
-                                    }}
-                                />
-
-
-                                {/* NOTIFICATION BUTTON */}
+                                {/* NOTIFICATION + CHAT OPTIONS */}
 
                                 <div
                                     style={{
@@ -4722,48 +4611,80 @@ const ChatPage = () => {
                                         gap: "4px",
                                     }}
                                 >
-                                    {/* NOTIFICATION */}
 
-                                    <div
-                                        style={{
-                                            position: "relative",
-                                        }}
-                                    >
-                                        <Button
-                                            type="text"
-                                            icon={<BellOutlined />}
-                                            onClick={() =>
-                                                setNotificationOpen(
-                                                    (prev) => !prev
-                                                )
+                                    {/* AUDIO CALL BUTTON */}
+                                    <Button
+                                        type="text"
+                                        icon={<PhoneOutlined />}
+                                        aria-label="Audio call"
+                                        onClick={() => {
+                                            const targetUserId =
+                                                selectedContact?.other_user?.id;
+
+                                            if (!targetUserId) {
+                                                antMessage.error(
+                                                    "User information is missing."
+                                                );
+                                                return;
                                             }
-                                        />
 
-                                        {notificationCount > 0 && (
-                                            <span
-                                                style={{
-                                                    position: "absolute",
-                                                    top: "0",
-                                                    right: "0",
-                                                    minWidth: "18px",
-                                                    height: "18px",
-                                                    borderRadius: "9px",
-                                                    background: "#ff4d4f",
-                                                    color: "#fff",
-                                                    fontSize: "10px",
-                                                    fontWeight: 700,
-                                                    display: "flex",
-                                                    alignItems: "center",
-                                                    justifyContent: "center",
-                                                    padding: "0 4px",
-                                                }}
-                                            >
-                                                {notificationCount > 99
-                                                    ? "99+"
-                                                    : notificationCount}
-                                            </span>
-                                        )}
-                                    </div>
+                                            startOutgoingCall(
+                                                targetUserId,
+                                                selectedContact.id,
+                                                "audio"
+                                            );
+                                        }}
+                                    />
+
+                                    {/* VIDEO CALL BUTTON */}
+                                    <Button
+                                        type="text"
+                                        icon={<VideoCameraOutlined />}
+                                        aria-label="Video call"
+                                        onClick={() => {
+                                            const targetUserId =
+                                                selectedContact?.other_user?.id;
+
+                                            if (!targetUserId) {
+                                                antMessage.error(
+                                                    "User information is missing."
+                                                );
+                                                return;
+                                            }
+
+                                            startOutgoingCall(
+                                                targetUserId,
+                                                selectedContact.id,
+                                                "video"
+                                            );
+                                        }}
+                                    />
+
+                                    {/* PER-CHAT NOTIFICATION TOGGLE */}
+
+                                    <Button
+                                        type="text"
+                                        icon={<BellOutlined />}
+                                        loading={chatNotificationLoading}
+                                        aria-label={
+                                            chatNotificationsEnabled
+                                                ? "Turn off notifications for this chat"
+                                                : "Turn on notifications for this chat"
+                                        }
+                                        aria-pressed={chatNotificationsEnabled}
+                                        title={
+                                            chatNotificationsEnabled
+                                                ? "Notifications on"
+                                                : "Notifications off"
+                                        }
+                                        onClick={handleToggleChatNotifications}
+                                        style={{
+                                            opacity:
+                                                chatNotificationsEnabled
+                                                    ? 1
+                                                    : 0.45,
+                                        }}
+                                    />
 
                                     {/* THREE DOTS MENU */}
 
@@ -4799,342 +4720,13 @@ const ChatPage = () => {
                                             aria-label="Chat options"
                                         />
                                     </Dropdown>
+
                                 </div>
 
 
-                                {/* NOTIFICATION PANEL */}
-
-                                {notificationOpen && (
-
-                                    <div
-                                        className={styles.notificationPopup}
-                                    >
-
-                                        <div
-                                            style={{
-                                                display:
-                                                    "flex",
-                                                justifyContent:
-                                                    "space-between",
-                                                alignItems:
-                                                    "center",
-                                                marginBottom:
-                                                    "8px",
-                                                padding:
-                                                    "4px",
-                                            }}
-                                        >
-
-                                            <strong>
-                                                Notifications
-                                            </strong>
 
 
-                                            {notificationCount >
-                                                0 && (
 
-                                                    <Button
-                                                        type="link"
-                                                        size="small"
-                                                        onClick={async () => {
-                                                            try {
-                                                                const {
-                                                                    markAllNotificationsAsRead,
-                                                                } =
-                                                                    await import(
-                                                                        "../../../api/notification.api"
-                                                                    );
-
-                                                                await markAllNotificationsAsRead();
-
-                                                                setNotifications([]);
-
-                                                                setNotificationCount(
-                                                                    0
-                                                                );
-                                                            } catch (
-                                                            error
-                                                            ) {
-                                                                console.error(
-                                                                    "Failed to mark notifications:",
-                                                                    error
-                                                                );
-                                                            }
-                                                        }}
-                                                    >
-                                                        Mark all read
-                                                    </Button>
-
-                                                )}
-
-                                        </div>
-
-
-                                        {notifications.length ===
-                                            0 ? (
-
-                                            <div
-                                                style={{
-                                                    textAlign:
-                                                        "center",
-                                                    padding:
-                                                        "30px 10px",
-                                                    color: darkMode
-                                                        ? "#8696a0"
-                                                        : "#888",
-                                                }}
-                                            >
-                                                No notifications
-                                            </div>
-
-                                        ) : (
-
-                                            notifications.map(
-                                                (
-                                                    notification
-                                                ) => (
-
-                                                    <div
-                                                        key={
-                                                            notification.id
-                                                        }
-                                                        onClick={async () => {
-
-                                                            /* --------------------------------
-                                                               MARK NOTIFICATION READ
-                                                            -------------------------------- */
-
-                                                            if (
-                                                                !notification.is_read
-                                                            ) {
-                                                                try {
-                                                                    const {
-                                                                        markNotificationAsRead,
-                                                                    } =
-                                                                        await import(
-                                                                            "../../../api/notification.api"
-                                                                        );
-
-                                                                    await markNotificationAsRead(
-                                                                        notification.id
-                                                                    );
-
-                                                                    setNotifications((prev) =>
-                                                                        prev.filter(
-                                                                            (item) =>
-                                                                                item.id !== notification.id
-                                                                        )
-                                                                    );
-
-                                                                    setNotificationCount(
-                                                                        (
-                                                                            prev
-                                                                        ) =>
-                                                                            Math.max(
-                                                                                0,
-                                                                                prev -
-                                                                                1
-                                                                            )
-                                                                    );
-                                                                } catch (
-                                                                error
-                                                                ) {
-                                                                    console.error(
-                                                                        "Failed to mark notification:",
-                                                                        error
-                                                                    );
-                                                                }
-                                                            }
-
-
-                                                            /* --------------------------------
-                                                               OPEN RELATED CONVERSATION
-                                                            -------------------------------- */
-
-                                                            const conversationId =
-                                                                getNotificationConversationId(
-                                                                    notification
-                                                                );
-
-
-                                                            if (
-                                                                conversationId
-                                                            ) {
-                                                                try {
-
-                                                                    /*
-                                                                     * Pehle current sidebar
-                                                                     * list mein search karo.
-                                                                     */
-
-                                                                    let conversation =
-                                                                        conversations.find(
-                                                                            (
-                                                                                item
-                                                                            ) =>
-                                                                                String(
-                                                                                    item.id
-                                                                                ) ===
-                                                                                String(
-                                                                                    conversationId
-                                                                                )
-                                                                        );
-
-
-                                                                    /*
-                                                                     * Agar sidebar mein nahi
-                                                                     * hai to backend se fresh
-                                                                     * list lao.
-                                                                     */
-
-                                                                    if (
-                                                                        !conversation
-                                                                    ) {
-                                                                        const refreshed =
-                                                                            await fetchConversations();
-
-                                                                        conversation =
-                                                                            refreshed.find(
-                                                                                (
-                                                                                    item
-                                                                                ) =>
-                                                                                    String(
-                                                                                        item.id
-                                                                                    ) ===
-                                                                                    String(
-                                                                                        conversationId
-                                                                                    )
-                                                                            );
-                                                                    }
-
-
-                                                                    if (
-                                                                        conversation
-                                                                    ) {
-                                                                        setSelectedContact(
-                                                                            conversation
-                                                                        );
-
-                                                                        setConversations(
-                                                                            (
-                                                                                prev
-                                                                            ) =>
-                                                                                prev.map(
-                                                                                    (
-                                                                                        item
-                                                                                    ) =>
-                                                                                        String(
-                                                                                            item.id
-                                                                                        ) ===
-                                                                                            String(
-                                                                                                conversationId
-                                                                                            )
-                                                                                            ? {
-                                                                                                ...item,
-                                                                                                unread_count:
-                                                                                                    0,
-                                                                                            }
-                                                                                            : item
-                                                                                )
-                                                                        );
-                                                                    }
-
-                                                                } catch (
-                                                                error
-                                                                ) {
-                                                                    console.error(
-                                                                        "Failed to open notification conversation:",
-                                                                        error
-                                                                    );
-                                                                }
-                                                            }
-
-
-                                                            setNotificationOpen(
-                                                                false
-                                                            );
-
-                                                        }}
-                                                        style={{
-                                                            padding:
-                                                                "10px",
-                                                            borderRadius:
-                                                                "8px",
-                                                            cursor:
-                                                                "pointer",
-                                                            background:
-                                                                notification.is_read
-                                                                    ? "transparent"
-                                                                    : darkMode
-                                                                        ? "#202c33"
-                                                                        : "#e7fce3",
-                                                            marginBottom:
-                                                                "4px",
-                                                        }}
-                                                    >
-
-                                                        <div
-                                                            style={{
-                                                                fontWeight:
-                                                                    notification.is_read
-                                                                        ? 400
-                                                                        : 600,
-                                                                color: darkMode
-                                                                    ? "#e9edef"
-                                                                    : "#111b21",
-                                                            }}
-                                                        >
-                                                            {
-                                                                notification.title
-                                                            }
-                                                        </div>
-
-
-                                                        <div
-                                                            style={{
-                                                                fontSize:
-                                                                    "13px",
-                                                                color: darkMode
-                                                                    ? "#aebac1"
-                                                                    : "#667781",
-                                                                marginTop:
-                                                                    "3px",
-                                                            }}
-                                                        >
-                                                            {
-                                                                notification.body
-                                                            }
-                                                        </div>
-
-
-                                                        <div
-                                                            style={{
-                                                                fontSize:
-                                                                    "11px",
-                                                                color: darkMode
-                                                                    ? "#8696a0"
-                                                                    : "#8696a0",
-                                                                marginTop:
-                                                                    "5px",
-                                                            }}
-                                                        >
-                                                            {notification.created_at
-                                                                ? new Date(
-                                                                    notification.created_at
-                                                                ).toLocaleString()
-                                                                : ""}
-                                                        </div>
-
-                                                    </div>
-
-                                                )
-                                            )
-
-                                        )}
-
-                                    </div>
-
-                                )}
 
                             </header>
 
@@ -5591,69 +5183,59 @@ const ChatPage = () => {
                                                         EDIT / DELETE
                                                     ================================================= */}
 
+                                                            {/* =================================================
+    EDIT / DELETE
+================================================= */}
+
                                                             {isOwnMessage &&
                                                                 item.message_type !== "call" &&
-                                                                canModifyMessage(
-                                                                    item
-                                                                ) && (
+                                                                canModifyMessage(item) && (
 
                                                                     <div
                                                                         style={{
-                                                                            display:
-                                                                                "flex",
-                                                                            justifyContent:
-                                                                                "flex-end",
-                                                                            gap:
-                                                                                "6px",
-                                                                            marginTop:
-                                                                                "6px",
+                                                                            display: "flex",
+                                                                            justifyContent: "flex-end",
+                                                                            gap: "6px",
+                                                                            marginTop: "6px",
                                                                         }}
                                                                     >
 
-                                                                        <Button
-                                                                            type="link"
-                                                                            size="small"
-                                                                            onClick={() =>
-                                                                                handleStartEdit(
-                                                                                    item
-                                                                                )
-                                                                            }
-                                                                            style={{
-                                                                                padding:
-                                                                                    0,
-                                                                                height:
-                                                                                    "auto",
-                                                                                fontSize:
-                                                                                    "11px",
-                                                                            }}
-                                                                        >
-                                                                            Edit
-                                                                        </Button>
+                                                                        {/* EDIT — TEXT MESSAGES ONLY */}
+                                                                        {item.message_type === "text" && (
+                                                                            <Button
+                                                                                type="link"
+                                                                                size="small"
+                                                                                onClick={() =>
+                                                                                    handleStartEdit(item)
+                                                                                }
+                                                                                style={{
+                                                                                    padding: 0,
+                                                                                    height: "auto",
+                                                                                    fontSize: "11px",
+                                                                                }}
+                                                                            >
+                                                                                Edit
+                                                                            </Button>
+                                                                        )}
 
-
+                                                                        {/* DELETE — TEXT, IMAGE, FILE, AUDIO ETC. */}
                                                                         <Button
                                                                             type="link"
                                                                             danger
                                                                             size="small"
                                                                             onClick={() =>
-                                                                                handleDeleteMessage(
-                                                                                    item.id
-                                                                                )
+                                                                                handleDeleteMessage(item.id)
                                                                             }
                                                                             style={{
-                                                                                padding:
-                                                                                    0,
-                                                                                height:
-                                                                                    "auto",
-                                                                                fontSize:
-                                                                                    "11px",
+                                                                                padding: 0,
+                                                                                height: "auto",
+                                                                                fontSize: "11px",
                                                                             }}
                                                                         >
                                                                             Delete
                                                                         </Button>
 
                                                                     </div>
-
                                                                 )}
 
 
@@ -5923,13 +5505,13 @@ const ChatPage = () => {
                                                 className={styles.voicePreviewProgressBar}
                                                 style={{
                                                     width: `${recordedVoice.duration > 0
-                                                            ? Math.min(
-                                                                100,
-                                                                (previewCurrentTime /
-                                                                    recordedVoice.duration) *
-                                                                100
-                                                            )
-                                                            : 0
+                                                        ? Math.min(
+                                                            100,
+                                                            (previewCurrentTime /
+                                                                recordedVoice.duration) *
+                                                            100
+                                                        )
+                                                        : 0
                                                         }%`,
                                                 }}
                                             />
@@ -6723,7 +6305,7 @@ const ChatPage = () => {
                     )
                 }
             </div>
-        </ConfigProvider>
+        </ConfigProvider >
     );
 };
 

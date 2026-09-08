@@ -82,3 +82,27 @@ export const getUnreadCount = async (conversationId) => {
 
     return response.data;
 };
+
+
+export const getChatNotificationSettings = async (
+    conversationId
+) => {
+    const response = await axiosPrivate.get(
+        `/chat/conversations/${conversationId}/notification-settings`
+    );
+
+    return response.data;
+};
+
+
+export const setChatNotificationSettings = async (
+    conversationId,
+    notificationsEnabled
+) => {
+    const response = await axiosPrivate.put(
+        `/chat/conversations/${conversationId}/notification-settings`,
+        notificationsEnabled
+    );
+
+    return response.data;
+};
