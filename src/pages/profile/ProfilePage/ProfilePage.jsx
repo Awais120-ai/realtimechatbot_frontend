@@ -513,7 +513,7 @@ const ProfilePage = () => {
                             size={110}
                             src={
                                 profile?.profile_picture
-                                    ? `http://192.168.18.83:8001${profile.profile_picture}`
+                                    ? `https://realtimechatbot-2aee.onrender.com${profile.profile_picture}`
                                     : undefined
                             }
                             icon={
