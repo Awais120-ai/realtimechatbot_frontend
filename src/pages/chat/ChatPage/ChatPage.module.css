@@ -1296,102 +1296,331 @@
 
 
 
-/* WhatsApp-style attachment preview */
+/* =====================================================
+   WHATSAPP-STYLE ATTACHMENT / FILE PREVIEW COMPOSER
+===================================================== */
+
 .attachmentPreview {
     width: 100%;
-    padding: 10px 12px;
     display: flex;
+    justify-content: center;
     align-items: center;
-    background: #f5f6f6;
-    border-top: 1px solid #e5e5e5;
+    padding: 6px 0 10px 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+    margin-bottom: 4px;
+    box-sizing: border-box;
+    animation: previewSlideDown 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+@keyframes previewSlideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-8px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* --- IMAGE PREVIEW --- */
 .imagePreviewWrapper {
     position: relative;
     display: inline-flex;
-    max-width: 220px;
-    max-height: 180px;
-    border-radius: 10px;
+    justify-content: center;
+    align-items: center;
+    max-width: min(380px, 100%);
+    max-height: 220px;
+    border-radius: 12px;
     overflow: hidden;
-    background: #e5e5e5;
+    background: #0b141a;
+    box-shadow: 0 4px 16px rgba(11, 20, 26, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08);
+    border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .attachmentPreviewImage {
     display: block;
     width: auto;
     height: auto;
-    max-width: 220px;
-    max-height: 180px;
+    max-width: min(380px, 100%);
+    max-height: 220px;
     object-fit: contain;
-    border-radius: 10px;
+    border-radius: 11px;
+    user-select: none;
+    -webkit-user-drag: none;
 }
 
 .attachmentRemoveButton {
     position: absolute;
-    top: 6px;
-    right: 6px;
+    top: 8px;
+    right: 8px;
     width: 28px;
     height: 28px;
     border: none;
     border-radius: 50%;
-    background: rgba(0, 0, 0, 0.65);
-    color: white;
-    font-size: 20px;
-    line-height: 28px;
-    text-align: center;
+    background: rgba(11, 20, 26, 0.72);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
     cursor: pointer;
     padding: 0;
+    z-index: 10;
+    transition: all 0.15s ease-in-out;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 }
 
 .attachmentRemoveButton:hover {
-    background: rgba(0, 0, 0, 0.85);
+    background: rgba(11, 20, 26, 0.95);
+    transform: scale(1.08);
 }
 
+.attachmentRemoveButton:active {
+    transform: scale(0.95);
+}
+
+.imagePreviewMeta {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 16px 10px 6px 10px;
+    background: linear-gradient(to top, rgba(11, 20, 26, 0.75) 0%, transparent 100%);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.imagePreviewMetaName {
+    font-size: 11.5px;
+    font-weight: 500;
+    color: #f0f2f5;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 75%;
+}
+
+.imagePreviewMetaSize {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.85);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* --- NON-IMAGE FILE PREVIEW --- */
 .filePreviewCard {
     position: relative;
     display: flex;
     align-items: center;
-    width: min(360px, 100%);
-    min-height: 64px;
-    padding: 10px 42px 10px 12px;
-    border-radius: 10px;
-    background: white;
-    border: 1px solid #e0e0e0;
+    width: 100%;
+    max-width: 440px;
+    min-height: 60px;
+    padding: 8px 12px;
+    gap: 12px;
+    border-radius: 12px;
+    background: #ffffff;
+    border: 1px solid #e2e5e7;
+    box-shadow: 0 2px 8px rgba(11, 20, 26, 0.06);
+    box-sizing: border-box;
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
-.filePreviewIcon {
+.filePreviewCard:hover {
+    box-shadow: 0 4px 12px rgba(11, 20, 26, 0.09);
+    border-color: #d1d7db;
+}
+
+.filePreviewIconWrapper {
     width: 42px;
     height: 42px;
+    min-width: 42px;
+    border-radius: 10px;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    margin-right: 10px;
-    border-radius: 8px;
-    background: #f0f0f0;
-    font-size: 22px;
+    gap: 1px;
+    user-select: none;
+    border: 1px solid transparent;
+    transition: transform 0.15s ease;
+}
+
+.filePreviewIconSvg {
+    font-size: 15px;
+    line-height: 1;
+}
+
+.filePreviewExtBadge {
+    font-size: 8.5px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    line-height: 1;
+    text-transform: uppercase;
+}
+
+/* File category color badges */
+.fileTypePdf {
+    background: #feecef;
+    color: #e53935;
+    border-color: #fca5a5;
+}
+
+.fileTypeWord {
+    background: #e8f0fe;
+    color: #1a73e8;
+    border-color: #bfdbfe;
+}
+
+.fileTypeExcel {
+    background: #e6f4ea;
+    color: #1e8e3e;
+    border-color: #bbf7d0;
+}
+
+.fileTypeZip {
+    background: #fef3e6;
+    color: #e65100;
+    border-color: #fed7aa;
+}
+
+.fileTypeText {
+    background: #f1f5f9;
+    color: #475569;
+    border-color: #cbd5e1;
+}
+
+.fileTypeGeneric {
+    background: #e6f7f5;
+    color: #00a884;
+    border-color: #a7f3d0;
 }
 
 .filePreviewInfo {
+    flex: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
 }
 
 .filePreviewName {
+    font-size: 13.5px;
+    font-weight: 500;
+    color: #111b21;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 14px;
-    font-weight: 500;
+    line-height: 1.3;
 }
 
-.filePreviewSize {
-    margin-top: 3px;
+.filePreviewMeta {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11.5px;
+    color: #667781;
+    line-height: 1;
+}
+
+.fileMetaDot {
+    opacity: 0.6;
+}
+
+.fileCardRemoveButton {
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    border-radius: 50%;
+    border: none;
+    background: #f0f2f5;
+    color: #54656f;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     font-size: 12px;
-    color: #777;
+    cursor: pointer;
+    padding: 0;
+    transition: all 0.15s ease-in-out;
 }
 
+.fileCardRemoveButton:hover {
+    background: #e2e5e7;
+    color: #111b21;
+    transform: scale(1.08);
+}
+
+.fileCardRemoveButton:active {
+    transform: scale(0.95);
+}
+
+/* --- COMPOSER ROW --- */
 .composerRow {
     width: 100%;
     display: flex;
     align-items: center;
     gap: 8px;
+}
+
+/* --- RESPONSIVE ADJUSTMENTS --- */
+@media (max-width: 768px) {
+    .imagePreviewWrapper {
+        max-width: 100%;
+        max-height: 190px;
+    }
+
+    .attachmentPreviewImage {
+        max-width: 100%;
+        max-height: 190px;
+    }
+
+    .filePreviewCard {
+        max-width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .attachmentPreview {
+        padding: 4px 0 8px 0;
+    }
+
+    .imagePreviewWrapper {
+        max-width: 100%;
+        max-height: 160px;
+        border-radius: 10px;
+    }
+
+    .attachmentPreviewImage {
+        max-height: 160px;
+        border-radius: 9px;
+    }
+
+    .filePreviewCard {
+        padding: 7px 10px;
+        gap: 10px;
+        min-height: 54px;
+        border-radius: 10px;
+    }
+
+    .filePreviewIconWrapper {
+        width: 38px;
+        height: 38px;
+        min-width: 38px;
+        border-radius: 8px;
+    }
+
+    .filePreviewName {
+        font-size: 13px;
+    }
+
+    .filePreviewMeta {
+        font-size: 11px;
+    }
 }

@@ -3611,6 +3611,38 @@ const ChatPage = () => {
         setSelectedFilePreview(null);
     };
 
+    useEffect(() => {
+        return () => {
+            if (selectedFilePreview) {
+                URL.revokeObjectURL(selectedFilePreview);
+            }
+        };
+    }, [selectedFilePreview]);
+
+    const formatAttachmentSize = (bytes) => {
+        if (!bytes && bytes !== 0) return "";
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+    };
+
+    const getFileExtension = (fileName) => {
+        if (!fileName) return "FILE";
+        const parts = fileName.split(".");
+        if (parts.length <= 1) return "FILE";
+        return parts.pop().toUpperCase().slice(0, 5);
+    };
+
+    const getFileTypeClass = (fileName) => {
+        const ext = (fileName || "").split(".").pop().toLowerCase();
+        if (ext === "pdf") return styles.fileTypePdf;
+        if (["doc", "docx"].includes(ext)) return styles.fileTypeWord;
+        if (["xls", "xlsx", "csv"].includes(ext)) return styles.fileTypeExcel;
+        if (["zip", "rar", "7z", "tar", "gz"].includes(ext)) return styles.fileTypeZip;
+        if (["txt", "md", "rtf", "json", "js", "html", "css"].includes(ext)) return styles.fileTypeText;
+        return styles.fileTypeGeneric;
+    };
+
     const openAttachmentPreview = (
         attachmentUrl,
         fileName,
@@ -5398,7 +5430,7 @@ const ChatPage = () => {
                                             <div className={styles.imagePreviewWrapper}>
                                                 <img
                                                     src={selectedFilePreview}
-                                                    alt={selectedFile.name}
+                                                    alt={selectedFile.name || "Attachment"}
                                                     className={styles.attachmentPreviewImage}
                                                 />
 
@@ -5408,34 +5440,60 @@ const ChatPage = () => {
                                                     onClick={removeSelectedFile}
                                                     disabled={uploadingFile}
                                                     aria-label="Remove attachment"
+                                                    title="Remove attachment"
                                                 >
-                                                    ×
+                                                    <CloseOutlined />
                                                 </button>
+
+                                                <div className={styles.imagePreviewMeta}>
+                                                    <span
+                                                        className={styles.imagePreviewMetaName}
+                                                        title={selectedFile.name}
+                                                    >
+                                                        {selectedFile.name}
+                                                    </span>
+                                                    <span className={styles.imagePreviewMetaSize}>
+                                                        {formatAttachmentSize(selectedFile.size)}
+                                                    </span>
+                                                </div>
                                             </div>
                                         ) : (
                                             <div className={styles.filePreviewCard}>
-                                                <div className={styles.filePreviewIcon}>
-                                                    📎
+                                                <div
+                                                    className={`${styles.filePreviewIconWrapper} ${getFileTypeClass(
+                                                        selectedFile.name
+                                                    )}`}
+                                                >
+                                                    <PaperClipOutlined className={styles.filePreviewIconSvg} />
+                                                    <span className={styles.filePreviewExtBadge}>
+                                                        {getFileExtension(selectedFile.name)}
+                                                    </span>
                                                 </div>
 
                                                 <div className={styles.filePreviewInfo}>
-                                                    <div className={styles.filePreviewName}>
+                                                    <div
+                                                        className={styles.filePreviewName}
+                                                        title={selectedFile.name}
+                                                    >
                                                         {selectedFile.name}
                                                     </div>
 
-                                                    <div className={styles.filePreviewSize}>
-                                                        {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                                                    <div className={styles.filePreviewMeta}>
+                                                        <span>{getFileExtension(selectedFile.name)}</span>
+                                                        <span className={styles.fileMetaDot}>•</span>
+                                                        <span>{formatAttachmentSize(selectedFile.size)}</span>
                                                     </div>
                                                 </div>
 
                                                 <button
                                                     type="button"
-                                                    className={styles.attachmentRemoveButton}
+                                                    className={styles.fileCardRemoveButton}
                                                     onClick={removeSelectedFile}
                                                     disabled={uploadingFile}
                                                     aria-label="Remove attachment"
+                                                    title="Remove attachment"
                                                 >
-                                                    ×
+                                                    <CloseOutlined />
                                                 </button>
                                             </div>
                                         )}
