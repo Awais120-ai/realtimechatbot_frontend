@@ -160,8 +160,7 @@ const normalizeFileUrl = (fileUrl) => {
         return value;
     }
 
-    return `http://192.168.18.83:8001${value.startsWith("/") ? value : `/${value}`
-        }`;
+    return `https://realtimechatbot-2aee.onrender.com${value.startsWith("/") ? value : `/${value}`}`;
 };
 
 
