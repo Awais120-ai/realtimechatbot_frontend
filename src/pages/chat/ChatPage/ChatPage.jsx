@@ -858,6 +858,8 @@ const ChatPage = () => {
     const [selectedFile, setSelectedFile] = useState(null);
     const [uploadingFile, setUploadingFile] = useState(false);
 
+    const [selectedFilePreview, setSelectedFilePreview] = useState(null);
+
 
     // =====================================================
     // VOICE MESSAGE
@@ -3585,8 +3587,15 @@ const ChatPage = () => {
 
         setSelectedFile(file);
 
+        if (file.type?.startsWith("image/")) {
+            const previewUrl = URL.createObjectURL(file);
+            setSelectedFilePreview(previewUrl);
+        } else {
+            setSelectedFilePreview(null);
+        }
+
         /*
-         * Same file ko dobara select karne allow karo.
+         * same file should be selected again
          */
 
         event.target.value = "";
@@ -3594,7 +3603,12 @@ const ChatPage = () => {
 
 
     const removeSelectedFile = () => {
+        if (selectedFilePreview) {
+            URL.revokeObjectURL(selectedFilePreview);
+        }
+
         setSelectedFile(null);
+        setSelectedFilePreview(null);
     };
 
     const openAttachmentPreview = (
@@ -5377,6 +5391,57 @@ const ChatPage = () => {
                                 }
                             >
 
+                                {selectedFile && (
+                                    <div className={styles.attachmentPreview}>
+                                        {selectedFile.type?.startsWith("image/") &&
+                                            selectedFilePreview ? (
+                                            <div className={styles.imagePreviewWrapper}>
+                                                <img
+                                                    src={selectedFilePreview}
+                                                    alt={selectedFile.name}
+                                                    className={styles.attachmentPreviewImage}
+                                                />
+
+                                                <button
+                                                    type="button"
+                                                    className={styles.attachmentRemoveButton}
+                                                    onClick={removeSelectedFile}
+                                                    disabled={uploadingFile}
+                                                    aria-label="Remove attachment"
+                                                >
+                                                    ×
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className={styles.filePreviewCard}>
+                                                <div className={styles.filePreviewIcon}>
+                                                    📎
+                                                </div>
+
+                                                <div className={styles.filePreviewInfo}>
+                                                    <div className={styles.filePreviewName}>
+                                                        {selectedFile.name}
+                                                    </div>
+
+                                                    <div className={styles.filePreviewSize}>
+                                                        {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                                                    </div>
+                                                </div>
+
+                                                <button
+                                                    type="button"
+                                                    className={styles.attachmentRemoveButton}
+                                                    onClick={removeSelectedFile}
+                                                    disabled={uploadingFile}
+                                                    aria-label="Remove attachment"
+                                                >
+                                                    ×
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
                                 <input
                                     id="chat-file-input"
                                     type="file"
@@ -5559,11 +5624,9 @@ const ChatPage = () => {
                                         <Input
                                             size="large"
                                             placeholder={
-                                                selectedFile
-                                                    ? selectedFile.name
-                                                    : editingMessageId
-                                                        ? "Edit message..."
-                                                        : "Type a message..."
+                                                editingMessageId
+                                                    ? "Edit message..."
+                                                    : "Type a message..."
                                             }
                                             value={messageText}
                                             onChange={handleInputChange}
