@@ -5833,34 +5833,6 @@ const ChatPage = () => {
                                         gap: "8px",
                                     }}
                                 >
-                                    {/* Download button in viewer */}
-                                    <a
-                                        href={
-                                            previewAttachment.url
-                                        }
-                                        download={
-                                            previewAttachment.fileName ||
-                                            "attachment"
-                                        }
-                                        onClick={(e) =>
-                                            e.stopPropagation()
-                                        }
-                                        style={{
-                                            color: "#e9edef",
-                                            fontSize: "20px",
-                                            lineHeight: 1,
-                                            padding: "6px 10px",
-                                            borderRadius: "8px",
-                                            background:
-                                                "rgba(255,255,255,0.1)",
-                                            display: "flex",
-                                            alignItems: "center",
-                                        }}
-                                        title="Download"
-                                    >
-                                        <DownloadOutlined />
-                                    </a>
-
                                     {/* Close button */}
                                     <button
                                         type="button"
