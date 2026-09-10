@@ -5600,7 +5600,7 @@ const ChatPage = () => {
                                     /* =================================================
                                        NORMAL COMPOSER
                                     ================================================= */
-                                    <>
+                                    <div className={styles.composerRow}>
                                         <Button
                                             size="large"
                                             icon={<PaperClipOutlined />}
@@ -5662,7 +5662,7 @@ const ChatPage = () => {
                                         >
                                             {editingMessageId ? "Update" : "Send"}
                                         </Button>
-                                    </>
+                                    </div>
                                 )}
 
                             </footer>
