@@ -513,7 +513,9 @@ const ProfilePage = () => {
                             size={110}
                             src={
                                 profile?.profile_picture
-                                    ? `https://realtimechatbot-2aee.onrender.com${profile.profile_picture}`
+                                    ? profile.profile_picture.startsWith("http")
+                                        ? profile.profile_picture
+                                        : `https://realtimechatbot-2aee.onrender.com${profile.profile_picture}`
                                     : undefined
                             }
                             icon={
