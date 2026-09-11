@@ -2,7 +2,7 @@ import { getAccessToken } from "./token.service";
 
 const WS_BASE_URL =
     import.meta.env.VITE_WS_URL ||
-    "ws://192.168.18.83:8001/api/v1/ws";
+    "ws://localhost:8001/api/v1/ws";
 
 /**
  * Create Native WebSocket connection
